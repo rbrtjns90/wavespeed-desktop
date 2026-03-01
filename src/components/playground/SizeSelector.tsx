@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -106,6 +106,7 @@ export function SizeSelector({
   const [height, setHeight] = useState(1024);
   const [widthInput, setWidthInput] = useState("1024");
   const [heightInput, setHeightInput] = useState("1024");
+  const [swapRotation, setSwapRotation] = useState(0);
 
   // Parse value into width/height
   useEffect(() => {
@@ -146,13 +147,14 @@ export function SizeSelector({
     onChange(`${w}*${h}`);
   };
 
-  const handleSwap = () => {
+  const handleSwap = useCallback(() => {
     setWidth(height);
     setHeight(width);
     setWidthInput(String(height));
     setHeightInput(String(width));
     onChange(`${height}*${width}`);
-  };
+    setSwapRotation((r) => r + 180);
+  }, [width, height, onChange]);
 
   // Generate presets based on min/max range
   const availablePresets = useMemo(() => generatePresets(min, max), [min, max]);
@@ -236,6 +238,8 @@ export function SizeSelector({
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
+            className="transition-transform duration-300"
+            style={{ transform: `rotate(${swapRotation}deg)` }}
           >
             <path d="M8 3L4 7l4 4" />
             <path d="M4 7h16" />

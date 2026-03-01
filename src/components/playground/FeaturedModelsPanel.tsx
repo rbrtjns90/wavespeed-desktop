@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import type { Model } from "@/types/model";
@@ -101,16 +102,19 @@ function PosterCard({
   onClick: () => void;
   className?: string;
 }) {
+  const [loaded, setLoaded] = useState(false);
   return (
     <div
       className={`relative rounded-xl overflow-hidden bg-muted cursor-pointer group ${className ?? ""}`}
       onClick={onClick}
     >
+      {!loaded && <div className="absolute inset-0 animate-pulse bg-muted" />}
       <img
         src={family.poster}
         alt={family.name}
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
         loading="lazy"
+        onLoad={() => setLoaded(true)}
       />
       <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
       {family.isNew && (

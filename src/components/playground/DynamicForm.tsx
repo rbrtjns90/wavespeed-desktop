@@ -267,7 +267,7 @@ export function DynamicForm({
   // When not collapsible, render all fields flat (original behavior)
   if (!collapsible) {
     const formContent = (
-      <div className="space-y-4 pr-4 py-2">{fields.map(renderField)}</div>
+      <div className="space-y-4 py-2">{fields.map(renderField)}</div>
     );
     if (!scrollable) return formContent;
     return <ScrollArea className="h-full">{formContent}</ScrollArea>;
@@ -275,7 +275,7 @@ export function DynamicForm({
 
   // Collapsible: primary fields always visible, advanced fields in collapsible section
   const formContent = (
-    <div className="space-y-4 pr-4 py-2">
+    <div className="space-y-4 py-2">
       {/* Primary fields - always visible */}
       {primaryFields.map(renderField)}
 

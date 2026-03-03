@@ -352,11 +352,7 @@ function SessionCard({
             <span className="text-muted-foreground/60 ml-2">
               {elapsedStr} ago
             </span>
-            {totalCost > 0 && (
-              <span className="text-amber-400/70 ml-1">
-                💰 ${totalCost.toFixed(4)}
-              </span>
-            )}
+
           </div>
         </div>
         <button

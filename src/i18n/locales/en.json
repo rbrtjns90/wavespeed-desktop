@@ -283,6 +283,8 @@
       "searchPlaceholder": "Search models, LoRAs, and styles...",
       "all": "All",
       "allModels": "All Models",
+      "favorites": "Favorites",
+      "noFavorites": "No favorites yet — star a model to save it here",
       "searchResults": "{{count}} results"
     },
     "recentGenerations": "Recent Generations",

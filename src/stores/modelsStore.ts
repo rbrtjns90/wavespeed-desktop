@@ -7,13 +7,12 @@ export type SortBy = "name" | "price" | "type" | "sort_order";
 export type SortOrder = "asc" | "desc";
 
 const FAVORITES_STORAGE_KEY = "wavespeed_favorites";
+const MODELS_CACHE_KEY = "wavespeed_models_cache_v1";
 
 function loadFavorites(): Set<string> {
   try {
     const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (stored) {
-      return new Set(JSON.parse(stored));
-    }
+    if (stored) return new Set(JSON.parse(stored));
   } catch (e) {
     console.error("Failed to load favorites:", e);
   }
@@ -26,6 +25,21 @@ function saveFavorites(favorites: Set<string>) {
   } catch (e) {
     console.error("Failed to save favorites:", e);
   }
+}
+
+/** Load cached models synchronously from localStorage for instant first render */
+function loadCachedModels(): Model[] {
+  try {
+    const raw = localStorage.getItem(MODELS_CACHE_KEY);
+    if (raw) return JSON.parse(raw) as Model[];
+  } catch {}
+  return [];
+}
+
+function saveCachedModels(models: Model[]) {
+  try {
+    localStorage.setItem(MODELS_CACHE_KEY, JSON.stringify(models));
+  } catch {}
 }
 
 interface ModelsState {
@@ -53,7 +67,7 @@ interface ModelsState {
 }
 
 export const useModelsStore = create<ModelsState>((set, get) => ({
-  models: [],
+  models: loadCachedModels(), // instant: pre-populate from localStorage cache
   isLoading: false,
   error: null,
   searchQuery: "",
@@ -65,25 +79,21 @@ export const useModelsStore = create<ModelsState>((set, get) => ({
   hasFetched: false,
 
   fetchModels: async (force = false) => {
-    // Skip if already fetched (unless forced)
-    if (get().hasFetched && !force) {
-      return;
-    }
+    if (get().hasFetched && !force) return;
     set({ isLoading: true, error: null });
     try {
       const raw = await apiClient.listModels();
-      // Deduplicate by model_id (API may return duplicates)
       const seen = new Set<string>();
       const models = raw.filter((m) => {
         if (seen.has(m.model_id)) return false;
         seen.add(m.model_id);
         return true;
       });
+      saveCachedModels(models); // persist for next cold start
       set({ models, isLoading: false, hasFetched: true });
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : "Failed to fetch models",
+        error: error instanceof Error ? error.message : "Failed to fetch models",
         isLoading: false,
       });
     }

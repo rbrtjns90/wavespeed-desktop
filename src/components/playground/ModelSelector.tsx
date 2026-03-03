@@ -234,13 +234,11 @@ export function ModelSelector({
 
   return (
     <div ref={containerRef}>
-      {/* Title — outside the card */}
-      <Label className="mt-2 mb-1.5 block">
-        {t("playground.modelSelector", "Model Selector")}
-      </Label>
-
-      {/* Card container */}
-      <div className="rounded-lg border border-border/60 bg-card/50 p-3 space-y-2">
+      {/* Title — integrated into the card */}
+      <div className="rounded-lg border border-border/60 bg-card/50 p-3 space-y-2 mt-2">
+        <div className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider mb-1">
+          {t("playground.modelSelector", "Model Selector")}
+        </div>
         {/* Row 1: Breadcrumb / search trigger */}
         <div className="relative">
           <button

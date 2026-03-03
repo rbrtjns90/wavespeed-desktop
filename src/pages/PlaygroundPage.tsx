@@ -6,6 +6,7 @@ import {
   useMemo,
   useTransition,
 } from "react";
+import { flushSync } from "react-dom";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -16,7 +17,6 @@ import {
 import { useModelsStore } from "@/stores/modelsStore";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
 import { useTemplateStore } from "@/stores/templateStore";
-import { apiClient } from "@/api/client";
 import { DynamicForm } from "@/components/playground/DynamicForm";
 import { ModelSelector } from "@/components/playground/ModelSelector";
 import { BatchControls } from "@/components/playground/BatchControls";
@@ -37,7 +37,7 @@ import {
   Star,
   Layers,
   ChevronDown,
-  Monitor,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
@@ -80,7 +80,6 @@ export function PlaygroundPage() {
     isLoading: isLoadingApiKey,
     isValidated,
     loadApiKey,
-    apiKey,
     hasAttemptedLoad,
   } = useApiKeyStore();
   const {
@@ -101,6 +100,7 @@ export function PlaygroundPage() {
     generateBatchInputs,
     setUploading,
     selectHistoryItem,
+    reorderTab,
   } = usePlaygroundStore();
   const { templates, loadTemplates, createTemplate, migrateFromLocalStorage } =
     useTemplateStore();
@@ -138,77 +138,149 @@ export function PlaygroundPage() {
   // Mobile view state: 'config' or 'output'
   const [mobileView, setMobileView] = useState<"config" | "output">("config");
 
+  // Resizable left panel
+  const [leftPanelWidth, setLeftPanelWidth] = useState(300);
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = leftPanelWidth;
+    const onMove = (ev: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = ev.clientX - startX;
+      const newWidth = Math.max(220, Math.min(500, startWidth + delta));
+      setLeftPanelWidth(newWidth);
+    };
+    const onUp = () => {
+      isDraggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [leftPanelWidth]);
+
   // Right panel tab state
   const isMobile = isCapacitorNative();
-  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("featured");
+  // Persist rightPanelTab across navigation using sessionStorage
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>(() => {
+    // If arriving with a modelId in the URL, go straight to result
+    if (params["*"] || params.modelId) return "result";
+    const saved = sessionStorage.getItem("pg_rightPanelTab") as RightPanelTab | null;
+    return saved ?? (tabs.length > 0 ? "result" : "featured");
+  });
   const [, startTransition] = useTransition();
   const switchTab = useCallback((tab: RightPanelTab) => {
-    startTransition(() => setRightPanelTab(tab));
+    startTransition(() => {
+      setRightPanelTab(tab);
+      sessionStorage.setItem("pg_rightPanelTab", tab);
+    });
   }, []);
 
   // When all tabs are closed and we're on the Result tab, switch to Featured
   useEffect(() => {
     if (!activeTab && rightPanelTab === "result") {
       setRightPanelTab("featured");
+      sessionStorage.setItem("pg_rightPanelTab", "featured");
     }
   }, [activeTab, rightPanelTab, isMobile]);
 
   // Top search bar state — removed: search is now inline per tab
 
-  // Workspace sessions dropdown state
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const workspaceRef = useRef<HTMLDivElement>(null);
+  // Workspace sessions dropdown state — removed, now using browser-style tabs
 
-  // Sliding tab indicator for right panel
-  const tabBarRef = useRef<HTMLDivElement>(null);
-  const [tabIndicatorStyle, setTabIndicatorStyle] =
-    useState<React.CSSProperties>({ opacity: 0 });
-  const tabIndicatorPositioned = useRef(false);
+  // Tab scroll ref for overflow detection
+  const pgTabScrollRef = useRef<HTMLDivElement>(null);
 
-  // Close workspace dropdown on click outside
+  // Tab list dropdown state
+  const [tabListOpen, setTabListOpen] = useState(false);
+  const tabListRef = useRef<HTMLDivElement>(null);
+
+  // Tab drag-to-reorder state
+  const [dragTabId, setDragTabId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{
+    tabId: string;
+    side: "left" | "right";
+  } | null>(null);
+
+  // Close tab list dropdown on click outside
   useEffect(() => {
-    if (!workspaceOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
+    if (!tabListOpen) return;
+    const handler = (e: MouseEvent) => {
       if (
-        workspaceRef.current &&
-        !workspaceRef.current.contains(e.target as Node)
+        tabListRef.current &&
+        !tabListRef.current.contains(e.target as Node)
       ) {
-        setWorkspaceOpen(false);
+        setTabListOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [workspaceOpen]);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [tabListOpen]);
 
-  // Measure sliding tab indicator position
-  useEffect(() => {
-    const measure = () => {
-      const bar = tabBarRef.current;
-      if (!bar) return;
-      const activeBtn = bar.querySelector(
-        "[data-tab-active]",
-      ) as HTMLElement | null;
-      if (!activeBtn) {
-        setTabIndicatorStyle((s) => ({ ...s, opacity: 0 }));
+  // Tab drag handlers
+  const handleTabDragStart = useCallback(
+    (e: React.DragEvent, tabId: string) => {
+      setDragTabId(tabId);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", tabId);
+    },
+    [],
+  );
+
+  const handleTabDragOver = useCallback(
+    (e: React.DragEvent, tabId: string) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!dragTabId || tabId === dragTabId) {
+        setDropIndicator(null);
         return;
       }
-      const barRect = bar.getBoundingClientRect();
-      const btnRect = activeBtn.getBoundingClientRect();
-      setTabIndicatorStyle({
-        left: btnRect.left - barRect.left,
-        width: btnRect.width,
-        opacity: 1,
-      });
-      tabIndicatorPositioned.current = true;
-    };
-    requestAnimationFrame(measure);
-    const timer = setTimeout(measure, 350);
-    window.addEventListener("resize", measure);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", measure);
-    };
-  }, [rightPanelTab, workspaceOpen]);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const side = e.clientX - rect.left < rect.width / 2 ? "left" : "right";
+      setDropIndicator({ tabId, side });
+    },
+    [dragTabId],
+  );
+
+  const handleTabDrop = useCallback(
+    (e: React.DragEvent, targetTabId: string) => {
+      e.preventDefault();
+      if (!dragTabId || dragTabId === targetTabId) {
+        setDragTabId(null);
+        setDropIndicator(null);
+        return;
+      }
+      const fromIdx = tabs.findIndex((t) => t.id === dragTabId);
+      const toIdx = tabs.findIndex((t) => t.id === targetTabId);
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const side = dropIndicator?.side ?? "right";
+        const insertIdx =
+          fromIdx < toIdx
+            ? side === "left"
+              ? toIdx - 1
+              : toIdx
+            : side === "left"
+              ? toIdx
+              : toIdx + 1;
+        reorderTab(fromIdx, Math.max(0, insertIdx));
+      }
+      setDragTabId(null);
+      setDropIndicator(null);
+    },
+    [dragTabId, dropIndicator, tabs, reorderTab],
+  );
+
+  const handleTabDragEnd = useCallback(() => {
+    setDragTabId(null);
+    setDropIndicator(null);
+  }, []);
 
   // Template dialog states
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
@@ -220,11 +292,6 @@ export function PlaygroundPage() {
     if (!batchConfig.enabled) return [];
     return generateBatchInputs();
   }, [activeTab, generateBatchInputs]);
-
-  // Dynamic pricing state
-  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
-  const [isPricingLoading, setIsPricingLoading] = useState(false);
-  const pricingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Migrate templates and load on mount
   useEffect(() => {
@@ -264,42 +331,6 @@ export function PlaygroundPage() {
       fetchModels();
     }
   }, [isValidated, fetchModels]);
-
-  // Calculate dynamic pricing with debounce
-  useEffect(() => {
-    if (!activeTab?.selectedModel || !apiKey) {
-      setCalculatedPrice(null);
-      return;
-    }
-
-    // Clear previous timeout
-    if (pricingTimeoutRef.current) {
-      clearTimeout(pricingTimeoutRef.current);
-    }
-
-    // Debounce pricing calculation
-    pricingTimeoutRef.current = setTimeout(async () => {
-      setIsPricingLoading(true);
-      try {
-        const price = await apiClient.calculatePricing(
-          activeTab.selectedModel!.model_id,
-          activeTab.formValues,
-        );
-        setCalculatedPrice(price);
-      } catch {
-        // Fall back to base price on error
-        setCalculatedPrice(null);
-      } finally {
-        setIsPricingLoading(false);
-      }
-    }, 500);
-
-    return () => {
-      if (pricingTimeoutRef.current) {
-        clearTimeout(pricingTimeoutRef.current);
-      }
-    };
-  }, [activeTab?.selectedModel, activeTab?.formValues, apiKey, tabs]);
 
   // Load template from URL query param
   useEffect(() => {
@@ -397,6 +428,13 @@ export function PlaygroundPage() {
         createTab(model);
       }
       navigate(`/playground/${modelId}`, { replace: true });
+      // Defer panel switch so the model/form state settles before showing result panel
+      if (rightPanelTab !== "result") {
+        requestAnimationFrame(() => {
+          setRightPanelTab("result");
+          sessionStorage.setItem("pg_rightPanelTab", "result");
+        });
+      }
     }
   };
 
@@ -423,7 +461,7 @@ export function PlaygroundPage() {
     }
   }, [activeTab, switchTab, runBatch, runPrediction]);
 
-  // Ctrl+Enter / Cmd+Enter keyboard shortcut to run
+  // Ctrl+Enter / Cmd+Enter to run; Ctrl+W / Cmd+W to close active tab
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -432,10 +470,14 @@ export function PlaygroundPage() {
           handleRun();
         }
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === "w") {
+        e.preventDefault();
+        if (activeTabId) closeTab(activeTabId);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTab, handleRun]);
+  }, [activeTab, activeTabId, handleRun, closeTab]);
 
   const handleReset = () => {
     resetForm();
@@ -445,11 +487,20 @@ export function PlaygroundPage() {
   const handleNewTab = () => {
     const currentModel = activeTab?.selectedModel;
     createTab(currentModel || undefined);
+    // Stay on result panel, not featured
+    setRightPanelTab("result");
+    sessionStorage.setItem("pg_rightPanelTab", "result");
     if (currentModel) {
       navigate(`/playground/${currentModel.model_id}`);
     } else {
       navigate("/playground");
     }
+    // Scroll to show the newest tab
+    requestAnimationFrame(() => {
+      if (pgTabScrollRef.current) {
+        pgTabScrollRef.current.scrollLeft = pgTabScrollRef.current.scrollWidth;
+      }
+    });
   };
 
   // Explore: select a featured model → open in new tab
@@ -459,7 +510,12 @@ export function PlaygroundPage() {
       if (model) {
         createTab(model);
         navigate(`/playground/${primaryVariant}`);
-        setRightPanelTab("result");
+        // Defer panel switch to next frame so createTab's render completes first,
+        // preventing a blank-frame flash between featured→result transition
+        requestAnimationFrame(() => {
+          setRightPanelTab("result");
+          sessionStorage.setItem("pg_rightPanelTab", "result");
+        });
       }
     },
     [models, createTab, navigate],
@@ -469,58 +525,44 @@ export function PlaygroundPage() {
   const handleUseTemplateFromPanel = useCallback(
     (template: import("@/types/template").Template) => {
       if (template.playgroundData) {
-        if (!activeTab) {
-          // No active tab — create one with the template's model
-          const model = template.playgroundData.modelId
-            ? models.find(
-                (m) => m.model_id === template.playgroundData!.modelId,
-              )
-            : undefined;
-          createTab(model);
-          if (template.playgroundData.modelId) {
-            navigate(`/playground/${template.playgroundData.modelId}`, {
-              replace: true,
-            });
+        flushSync(() => {
+          if (!activeTab) {
+            const model = template.playgroundData!.modelId
+              ? models.find((m) => m.model_id === template.playgroundData!.modelId)
+              : undefined;
+            createTab(model);
+          } else {
+            if (
+              template.playgroundData!.modelId &&
+              activeTab.selectedModel?.model_id !== template.playgroundData!.modelId
+            ) {
+              const model = models.find((m) => m.model_id === template.playgroundData!.modelId);
+              if (model) setSelectedModel(model);
+            }
+            setFormValues(template.playgroundData!.values);
           }
-          // Set form values after a tick so the new tab is active
+          setRightPanelTab("result");
+          sessionStorage.setItem("pg_rightPanelTab", "result");
+        });
+
+        if (template.playgroundData.modelId) {
+          navigate(`/playground/${template.playgroundData.modelId}`, { replace: true });
+        }
+
+        // For new tab: set form values after tab is active
+        if (!activeTab) {
           setTimeout(() => {
             setFormValues(template.playgroundData!.values);
           }, 0);
-        } else {
-          if (
-            template.playgroundData.modelId &&
-            activeTab.selectedModel?.model_id !==
-              template.playgroundData.modelId
-          ) {
-            const model = models.find(
-              (m) => m.model_id === template.playgroundData!.modelId,
-            );
-            if (model) {
-              setSelectedModel(model);
-              navigate(`/playground/${template.playgroundData.modelId}`, {
-                replace: true,
-              });
-            }
-          }
-          setFormValues(template.playgroundData.values);
         }
+
         toast({
           title: t("playground.templateLoaded"),
           description: t("playground.loadedTemplate", { name: template.name }),
         });
-        switchTab("result");
       }
     },
-    [
-      activeTab,
-      models,
-      setSelectedModel,
-      setFormValues,
-      createTab,
-      navigate,
-      t,
-      switchTab,
-    ],
+    [activeTab, models, setSelectedModel, setFormValues, createTab, navigate, t],
   );
 
   const handleCloseTab = (e: React.MouseEvent, tabId: string) => {
@@ -529,25 +571,27 @@ export function PlaygroundPage() {
   };
 
   const handleTabClick = (tabId: string) => {
-    setActiveTab(tabId);
+    if (tabId === activeTabId && rightPanelTab === "result") return;
+    // Batch zustand + React state updates into a single synchronous commit to prevent flicker
+    flushSync(() => {
+      if (rightPanelTab !== "result") {
+        setRightPanelTab("result");
+        sessionStorage.setItem("pg_rightPanelTab", "result");
+      }
+      setActiveTab(tabId);
+    });
+    // Sync URL without triggering React Router re-render
     const tab = tabs.find((t) => t.id === tabId);
-    if (tab?.selectedModel) {
-      navigate(
-        `/playground/${encodeURIComponent(tab.selectedModel.model_id)}`,
-        { replace: true },
-      );
-    } else {
-      navigate("/playground", { replace: true });
-    }
+    const newUrl = tab?.selectedModel
+      ? `/playground/${encodeURIComponent(tab.selectedModel.model_id)}`
+      : "/playground";
+    window.history.replaceState(null, "", newUrl);
   };
 
-  // Show loading state while API key is being loaded from storage
-  // Also show loading when models are loading (needed for model selector)
-  if (
-    isLoadingApiKey ||
-    !hasAttemptedLoad ||
-    (isValidated && models.length === 0)
-  ) {
+  // Block render only while the API key is being read from disk.
+  // Once we have the key (or confirmed there's none), show the UI immediately.
+  // Models come from localStorage cache instantly, so no need to wait for network.
+  if (isLoadingApiKey || !hasAttemptedLoad) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -584,16 +628,17 @@ export function PlaygroundPage() {
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        <div ref={containerRef} className="flex flex-1 flex-col overflow-hidden md:flex-row">
           {/* Left Panel - Configuration (always visible) */}
           <div
             className={cn(
-              "w-full md:w-[360px] md:max-w-[360px] md:flex-none flex flex-col min-h-0 border-b bg-card/70 md:overflow-hidden md:border-r md:border-b-0",
-              mobileView === "config" ? "flex flex-1" : "hidden md:flex",
+              "w-full md:w-auto flex flex-col min-h-0 border-b bg-card/70 md:overflow-hidden md:border-r md:border-b-0 md:shrink-0 md:grow-0",
+              mobileView === "config" ? "flex flex-1 md:flex-initial" : "hidden md:flex",
             )}
+            style={{ flexBasis: `${leftPanelWidth}px` }}
           >
             {/* Page Title */}
-            <div className="px-4 py-3 border-b border-border shrink-0">
+            <div className="px-3 py-3 border-b border-border shrink-0">
               <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
                 <PlayCircle className="h-5 w-5 text-primary" />
                 {t("playground.title")}
@@ -601,7 +646,7 @@ export function PlaygroundPage() {
             </div>
 
             {/* Model Selector */}
-            <div className="px-4 pb-3 shrink-0">
+            <div className="px-3 pb-1 shrink-0">
               <ModelSelector
                 models={models}
                 value={activeTab?.selectedModel?.model_id}
@@ -610,7 +655,7 @@ export function PlaygroundPage() {
             </div>
 
             {/* Parameters */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3">
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
               {activeTab?.selectedModel ? (
                 <DynamicForm
                   model={activeTab.selectedModel}
@@ -663,7 +708,7 @@ export function PlaygroundPage() {
             </div>
 
             {/* Bottom: Run + actions on same row */}
-            <div className="border-t bg-background/80 px-4 py-3">
+            <div className="border-t bg-background/80 px-3 py-3">
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <BatchControls
@@ -676,17 +721,6 @@ export function PlaygroundPage() {
                       activeTab?.batchState?.isRunning
                         ? `${t("playground.running")} (${activeTab.batchState.queue.length})`
                         : t("playground.running")
-                    }
-                    price={
-                      activeTab?.selectedModel
-                        ? isPricingLoading
-                          ? "..."
-                          : calculatedPrice != null
-                            ? calculatedPrice.toFixed(4)
-                            : activeTab.selectedModel.base_price != null
-                              ? activeTab.selectedModel.base_price.toFixed(4)
-                              : undefined
-                        : undefined
                     }
                   />
                 </div>
@@ -710,6 +744,14 @@ export function PlaygroundPage() {
             </div>
           </div>
 
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            className="hidden md:flex w-1 cursor-col-resize items-center justify-center hover:bg-primary/20 active:bg-primary/30 transition-colors group shrink-0"
+          >
+            <div className="w-px h-8 bg-border group-hover:bg-primary/50 transition-colors" />
+          </div>
+
           {/* Right Panel - always visible */}
           <div
             className={cn(
@@ -717,184 +759,199 @@ export function PlaygroundPage() {
               mobileView === "output" ? "flex" : "hidden md:flex",
             )}
           >
-            {/* Content Tabs - always visible at top */}
-            <div
-              ref={tabBarRef}
-              className="relative flex items-center justify-between pl-4 pr-4 pt-2 border-b border-border shrink-0"
-            >
-              {/* Sliding tab indicator */}
-              <div
-                className={cn(
-                  "absolute bottom-0 h-[2px] bg-primary rounded-full pointer-events-none",
-                  tabIndicatorPositioned.current &&
-                    "transition-[left,width,opacity] duration-200 ease-out",
-                )}
-                style={tabIndicatorStyle}
-              />
-              {/* Left group: Workspace + Result */}
-              <div className="flex items-center gap-4">
-                {/* Workspace / Active Session dropdown */}
-                <div ref={workspaceRef} className="relative">
-                  <button
-                    onClick={() => setWorkspaceOpen(!workspaceOpen)}
-                    className={cn(
-                      "relative flex items-center gap-1.5 pb-2.5 pt-2 text-sm font-medium transition-colors",
-                      rightPanelTab === "result" || workspaceOpen
-                        ? "text-primary"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <Monitor className="h-4 w-4" />
-                    <span className="max-w-[160px] truncate">
-                      {activeTab?.selectedModel?.name
-                        ? formatModelDisplay(activeTab.selectedModel.name)
-                        : t("playground.workspace", "Workspace")}
-                    </span>
-                    {tabs.length > 0 && (
-                      <span className="text-[10px] bg-primary/15 text-primary rounded-full px-1.5 py-0.5 font-semibold leading-none">
-                        {tabs.length}
-                      </span>
-                    )}
-                    <ChevronDown
-                      className={cn(
-                        "h-3.5 w-3.5 transition-transform",
-                        workspaceOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
-
-                  {/* Sessions dropdown */}
-                  {workspaceOpen && (
-                    <div className="absolute z-50 mt-0.5 left-0 min-w-[260px] rounded-xl border border-border/80 bg-popover shadow-xl animate-in fade-in-0 zoom-in-95">
-                      <div className="p-1.5">
-                        {tabs.length === 0 ? (
-                          <div className="py-4 text-center text-xs text-muted-foreground">
-                            {t("playground.noTabs")}
-                          </div>
-                        ) : (
-                          tabs.map((tab) => (
-                            <button
-                              key={tab.id}
-                              onClick={() => {
-                                handleTabClick(tab.id);
-                                switchTab("result");
-                                setWorkspaceOpen(false);
-                              }}
-                              className={cn(
-                                "group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors",
-                                "hover:bg-accent hover:text-accent-foreground",
-                                tab.id === activeTabId &&
-                                  "bg-primary/10 text-foreground font-medium",
-                              )}
-                            >
-                              {tab.isRunning ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                              ) : (
-                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                              )}
-                              <span className="flex-1 text-left truncate">
+            {/* Content Tabs - browser-style tab bar */}
+            <div className="flex items-center border-b border-border pl-0 pr-2 gap-1 h-10 shrink-0">
+              {/* Tab list dropdown button */}
+              <div ref={tabListRef} className="relative shrink-0">
+                <button
+                  onClick={() => setTabListOpen(!tabListOpen)}
+                  className={cn(
+                    "flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0",
+                    tabListOpen
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  )}
+                  title={t("playground.tabs.allTabs", "All Tabs")}
+                >
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", tabListOpen && "rotate-180")} />
+                </button>
+                {tabListOpen && (
+                  <div className="absolute z-50 mt-1 left-0 min-w-[320px] max-h-[400px] overflow-y-auto rounded-xl border border-border/80 bg-popover shadow-xl animate-in fade-in-0 zoom-in-95">
+                    <div className="p-1.5">
+                      {tabs.length === 0 ? (
+                        <div className="py-4 text-center text-xs text-muted-foreground">
+                          {t("playground.noTabs", "No open tabs")}
+                        </div>
+                      ) : (
+                        tabs.map((tab) => (
+                          <div
+                            key={tab.id}
+                            onClick={() => {
+                              handleTabClick(tab.id);
+                              setTabListOpen(false);
+                            }}
+                            className={cn(
+                              "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer",
+                              "hover:bg-accent hover:text-accent-foreground",
+                              tab.id === activeTabId &&
+                                "bg-primary/10 text-foreground font-medium",
+                            )}
+                          >
+                            {tab.isRunning ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-primary" />
+                            ) : (
+                              <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="truncate font-medium">
                                 {tab.selectedModel?.name
                                   ? formatModelDisplay(tab.selectedModel.name)
                                   : t("playground.tabs.newTab")}
-                              </span>
-                              {tab.id === activeTabId && (
-                                <span className="text-[9px] bg-primary/20 text-primary rounded px-1 py-0.5 font-medium shrink-0">
-                                  active
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                {tab.selectedModel?.type && (
+                                  <span>{tab.selectedModel.type}</span>
+                                )}
+                                <span className="flex items-center gap-0.5">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  {new Date(tab.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </span>
-                              )}
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCloseTab(e, tab.id);
-                                }}
-                                className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity shrink-0"
-                              >
-                                <X className="h-3 w-3" />
+                              </div>
+                            </div>
+                            {tab.id === activeTabId && (
+                              <span className="text-[9px] bg-primary/20 text-primary rounded px-1 py-0.5 font-medium shrink-0">
+                                active
                               </span>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloseTab(e, tab.id);
+                              }}
+                              className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
+                            >
+                              <X className="h-3 w-3" />
                             </button>
-                          ))
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="border-t border-border/60 p-1.5">
+                      <button
+                        onClick={() => {
+                          handleNewTab();
+                          setTabListOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        {t("playground.tabs.newTab", "New Tab")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Scrollable session tabs */}
+              <div
+                ref={pgTabScrollRef}
+                className="flex-1 min-w-0 overflow-x-auto hide-scrollbar"
+                onWheel={(e) => {
+                  if (pgTabScrollRef.current && e.deltaY !== 0) {
+                    e.preventDefault();
+                    pgTabScrollRef.current.scrollLeft += e.deltaY;
+                  }
+                }}
+              >
+                <div className="flex items-center w-max gap-1">
+                  {tabs.map((tab) => {
+                    const isActive = tab.id === activeTabId && rightPanelTab === "result";
+                    return (
+                      <div
+                        key={tab.id}
+                        draggable
+                        onDragStart={(e) => handleTabDragStart(e, tab.id)}
+                        onDragOver={(e) => handleTabDragOver(e, tab.id)}
+                        onDrop={(e) => handleTabDrop(e, tab.id)}
+                        onDragEnd={handleTabDragEnd}
+                        onClick={() => {
+                          handleTabClick(tab.id);
+                        }}
+                        className={cn(
+                          "group relative flex h-8 items-center gap-1.5 px-3 text-xs transition-all cursor-pointer select-none shrink-0 max-w-[180px] hover:bg-primary/10 dark:hover:bg-muted/60",
+                          dragTabId === tab.id && "opacity-40",
+                          isActive
+                            ? "bg-primary/15 dark:bg-primary/10 text-foreground font-medium"
+                            : "bg-primary/[0.06] dark:bg-muted/20 text-muted-foreground",
                         )}
-                      </div>
-                      <div className="border-t border-border/60 p-1.5">
+                      >
+                        {/* Drop indicator lines */}
+                        {dropIndicator?.tabId === tab.id &&
+                          dropIndicator.side === "left" && (
+                            <div className="absolute -left-px top-1 bottom-1 w-0.5 rounded-full bg-primary" />
+                          )}
+                        {dropIndicator?.tabId === tab.id &&
+                          dropIndicator.side === "right" && (
+                            <div className="absolute -right-px top-1 bottom-1 w-0.5 rounded-full bg-primary" />
+                          )}
+                        {tab.isRunning ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        <span className="truncate flex-1">
+                          {tab.selectedModel?.name
+                            ? formatModelDisplay(tab.selectedModel.name)
+                            : t("playground.tabs.newTab")}
+                        </span>
                         <button
-                          onClick={() => {
-                            handleNewTab();
-                            setWorkspaceOpen(false);
-                          }}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                          onClick={(e) => handleCloseTab(e, tab.id)}
+                          className="ml-1 rounded p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted text-muted-foreground hover:text-foreground"
                         >
-                          <Plus className="h-3.5 w-3.5" />
-                          {t("playground.tabs.newTab", "New Tab")}
+                          <X className="h-3 w-3" />
                         </button>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
+                  {/* + button inside scroll area when not overflowing — removed, always fixed outside */}
                 </div>
-
-                <button
-                  onClick={() => {
-                    switchTab("result");
-                    setWorkspaceOpen(false);
-                  }}
-                  data-tab-active={
-                    rightPanelTab === "result" ? true : undefined
-                  }
-                  className={cn(
-                    "relative flex items-center gap-2 pb-2.5 pt-2 text-sm font-medium transition-colors",
-                    rightPanelTab === "result"
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                  {t("playground.rightPanel.result", "Results")}
-                </button>
               </div>
+              {/* + button always fixed outside scroll area */}
+              <button
+                onClick={handleNewTab}
+                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                title={t("playground.tabs.newTab", "New Tab")}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
 
               {/* Right group: Featured Models / Templates */}
-              <div className="flex items-center gap-4">
-                {(
-                  [
-                    ...(!isMobile
-                      ? [
-                          {
-                            key: "featured" as const,
-                            icon: <Star className="h-4 w-4" />,
-                            label: t(
-                              "playground.rightPanel.featuredModels",
-                              "Featured Models",
-                            ),
-                          },
-                        ]
-                      : []),
-                    {
-                      key: "templates" as const,
-                      icon: <FolderOpen className="h-4 w-4" />,
-                      label: t("playground.rightPanel.templates", "Templates"),
-                    },
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => {
-                      switchTab(tab.key);
-                      setWorkspaceOpen(false);
-                    }}
-                    data-tab-active={
-                      rightPanelTab === tab.key ? true : undefined
-                    }
-                    className={cn(
-                      "relative flex items-center gap-2 pb-2.5 pt-2 text-sm font-medium transition-colors",
-                      rightPanelTab === tab.key
-                        ? "text-primary"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {tab.icon}
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+              {!isMobile && (
+                <button
+                  onClick={() => switchTab("featured")}
+                  className={cn(
+                    "flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-xs font-semibold transition-all shrink-0 backdrop-blur-sm",
+                    rightPanelTab === "featured"
+                      ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700 border border-blue-500/50"
+                      : "bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 border border-white/10 hover:border-white/20",
+                  )}
+                >
+                  <Star className="h-3.5 w-3.5" />
+                  {t("playground.rightPanel.featuredModels", "Featured Models")}
+                </button>
+              )}
+              <button
+                onClick={() => switchTab("templates")}
+                className={cn(
+                  "flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-xs font-semibold transition-all shrink-0 backdrop-blur-sm",
+                  rightPanelTab === "templates"
+                    ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700 border border-blue-500/50"
+                    : "bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 border border-white/10 hover:border-white/20",
+                )}
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                {t("playground.rightPanel.templates", "Templates")}
+              </button>
             </div>
 
             {/* Right Panel Content */}

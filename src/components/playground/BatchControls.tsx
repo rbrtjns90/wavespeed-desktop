@@ -19,7 +19,6 @@ interface BatchControlsProps {
   onRun: () => void;
   runLabel: string;
   runningLabel: string;
-  price?: string;
 }
 
 export function BatchControls({
@@ -29,7 +28,6 @@ export function BatchControls({
   onRun,
   runLabel,
   runningLabel,
-  price,
 }: BatchControlsProps) {
   const { t } = useTranslation();
   const { getActiveTab, setBatchConfig } = usePlaygroundStore();
@@ -55,24 +53,13 @@ export function BatchControls({
   const displayLabel =
     enabled && repeatCount > 1 ? `${runLabel} (${repeatCount})` : runLabel;
 
-  // Calculate display price (multiply by repeatCount if batch enabled)
-  // Note: price is a plain number string like "0.0100" — the "$" prefix is in JSX
-  const displayPrice = (() => {
-    if (!price) return null;
-    if (!enabled) return price;
-    const numericPrice = parseFloat(price.replace(/[^0-9.]/g, ""));
-    if (isNaN(numericPrice)) return price;
-    const totalPrice = numericPrice * repeatCount;
-    return totalPrice.toFixed(2);
-  })();
-
   return (
     <div className="flex rounded-lg border border-transparent shadow-sm">
       {/* Main Run Button */}
       <Button
         className={cn(
-          "flex-1 h-9 text-sm bg-primary hover:bg-primary/90 text-primary-foreground transition-colors",
-          "rounded-r-none border-r border-r-primary-foreground/20 shadow-none",
+          "flex-1 h-9 text-sm bg-blue-600 hover:bg-blue-700 text-white transition-colors",
+          "rounded-r-none border-r border-r-white/20 shadow-none",
         )}
         onClick={onRun}
         disabled={disabled || isRunning || isUploading}
@@ -87,11 +74,6 @@ export function BatchControls({
           <>
             <Play className="mr-2 h-4 w-4" />
             {displayLabel}
-            {displayPrice && (
-              <span className="ml-2 rounded-full bg-primary-foreground/15 px-2 py-0.5 text-[11px] font-semibold tracking-wide">
-                ${displayPrice}
-              </span>
-            )}
             <kbd className="ml-auto text-[10px] font-normal opacity-60 tracking-wide">
               {navigator.platform?.includes("Mac") ? "⌘" : "Ctrl"}↵
             </kbd>
@@ -104,7 +86,7 @@ export function BatchControls({
         <DropdownMenuTrigger asChild>
           <Button
             className={cn(
-              "bg-primary hover:bg-primary/90 text-primary-foreground transition-colors",
+              "bg-blue-600 hover:bg-blue-700 text-white transition-colors",
               "rounded-l-none px-1.5 h-9 shadow-none",
             )}
             disabled={disabled || isRunning || isUploading}

@@ -40,7 +40,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { History, X, Plus, GitBranch } from "lucide-react";
+import { History, X, Plus, GitBranch, ChevronDown, Clock } from "lucide-react";
 import { TemplatePickerDialog } from "@/components/templates/TemplatePickerDialog";
 import { TemplateDialog } from "@/components/templates/TemplateDialog";
 import { WorkflowGuide, useWorkflowGuide } from "./components/WorkflowGuide";
@@ -74,6 +74,7 @@ interface TabSnapshot {
   nodes: unknown[];
   edges: unknown[];
   isDirty: boolean;
+  createdAt?: number;
 }
 
 interface PersistedWorkflowSession {
@@ -171,6 +172,7 @@ function hydrateSessionSync(): {
     nodes,
     edges,
     isDirty: false,
+    createdAt: Date.now(),
   };
   useWorkflowStore.setState({
     workflowId: null,
@@ -400,6 +402,7 @@ export function WorkflowPage() {
         nodes,
         edges,
         isDirty: false,
+        createdAt: Date.now(),
       },
     ]);
     useWorkflowStore.setState({
@@ -497,6 +500,20 @@ export function WorkflowPage() {
   // ── Tab overflow detection (Chrome-like + button behavior) ──
   const wfTabScrollRef = useRef<HTMLDivElement>(null);
   const [wfTabsOverflow, setWfTabsOverflow] = useState(false);
+
+  // ── Tab list dropdown ──
+  const [wfTabListOpen, setWfTabListOpen] = useState(false);
+  const wfTabListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!wfTabListOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (wfTabListRef.current && !wfTabListRef.current.contains(e.target as Node)) {
+        setWfTabListOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [wfTabListOpen]);
 
   // Dynamic title width measurement — use ResizeObserver for reliable sizing across languages
   const wfTitleRef = useRef<HTMLHeadingElement>(null);
@@ -626,6 +643,7 @@ export function WorkflowPage() {
             nodes,
             edges,
             isDirty: false,
+            createdAt: Date.now(),
           },
         ]);
         setActiveTabId(newTabId);
@@ -755,6 +773,7 @@ export function WorkflowPage() {
             nodes,
             edges,
             isDirty: false,
+            createdAt: Date.now(),
           };
           setTabs([newTab]);
           useWorkflowStore.setState({
@@ -1263,6 +1282,7 @@ export function WorkflowPage() {
             nodes: [],
             edges: [],
             isDirty: false,
+            createdAt: Date.now(),
           },
         ]);
         setActiveTabId(newTabId);
@@ -1439,6 +1459,87 @@ export function WorkflowPage() {
           <line x1={wfTitleWidth - 16} y1="60" x2={wfTitleWidth} y2="40" className="stroke-border" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </svg>
         <div className="flex items-center border-b border-border px-2 gap-1.5 h-10 bg-background" style={{ paddingLeft: wfTitleWidth }}>
+          {/* Tab list dropdown button */}
+          <div ref={wfTabListRef} className="relative shrink-0">
+            <button
+              onClick={() => setWfTabListOpen(!wfTabListOpen)}
+              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0 ${
+                wfTabListOpen
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              title={t("workflow.allTabs", "All Tabs")}
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${wfTabListOpen ? "rotate-180" : ""}`} />
+            </button>
+            {wfTabListOpen && (
+              <div className="absolute z-50 mt-1 left-0 min-w-[320px] max-h-[400px] overflow-y-auto rounded-xl border border-border/80 bg-popover shadow-xl animate-in fade-in-0 zoom-in-95">
+                <div className="p-1.5">
+                  {tabs.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-muted-foreground">
+                      {t("workflow.noTabs", "No open tabs")}
+                    </div>
+                  ) : (
+                    tabs.map((tab) => (
+                      <div
+                        key={tab.tabId}
+                        onClick={() => {
+                          switchTab(tab.tabId);
+                          setWfTabListOpen(false);
+                        }}
+                        className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer hover:bg-accent hover:text-accent-foreground ${
+                          tab.tabId === activeTabId
+                            ? "bg-primary/10 text-foreground font-medium"
+                            : ""
+                        }`}
+                      >
+                        <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <div className="truncate font-medium">{tab.workflowName}</div>
+                          {tab.createdAt && (
+                            <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground mt-0.5">
+                              <Clock className="h-2.5 w-2.5" />
+                              {new Date(tab.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          )}
+                        </div>
+                        {tab.isDirty && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                        )}
+                        {tab.tabId === activeTabId && (
+                          <span className="text-[9px] bg-primary/20 text-primary rounded px-1 py-0.5 font-medium shrink-0">
+                            active
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeTab(tab.tabId, e);
+                          }}
+                          className="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="border-t border-border/60 p-1.5">
+                  <button
+                    onClick={() => {
+                      addTab();
+                      setWfTabListOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("workflow.newTab", "New Tab")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Tabs — unified style with Playground */}
           <div
             ref={wfTabScrollRef}
@@ -1576,9 +1677,6 @@ export function WorkflowPage() {
               {t("workflow.unsaved", "unsaved")}
             </span>
           )}
-
-          {/* Spacer — limited so tabs don't push into run controls */}
-          <div className="w-1 shrink-0" />
 
           {/* Right: Run controls */}
           <div className="flex items-center gap-1.5" data-guide="run-controls">
@@ -1837,6 +1935,7 @@ export function WorkflowPage() {
                           nodes: [],
                           edges: [],
                           isDirty: false,
+                          createdAt: Date.now(),
                         },
                       ]);
                       setActiveTabId(newTabId);
@@ -2000,6 +2099,7 @@ export function WorkflowPage() {
                 nodes: [],
                 edges: [],
                 isDirty: false,
+                createdAt: Date.now(),
               },
             ]);
             setActiveTabId(newTabId);

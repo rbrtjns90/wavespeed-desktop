@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, memo } from "react";
+import { useState, useMemo, useCallback, useRef, memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useModelsStore } from "@/stores/modelsStore";
@@ -27,8 +27,10 @@ import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 type SortKey = "popularity" | "name" | "price";
 
@@ -207,10 +209,11 @@ export function ExplorePanel({
 }: ExplorePanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { models, toggleFavorite, isFavorite } = useModelsStore();
+  const { models, toggleFavorite, isFavorite, fetchModels } = useModelsStore();
   const { createTab } = usePlaygroundStore();
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("popularity");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -239,49 +242,85 @@ export function ExplorePanel({
     return Array.from(typeSet).sort();
   }, [models]);
 
-  const filteredModels = useMemo(() => {
-    let result = models;
+  // Deferred filtered+sorted list — computed after paint to avoid blocking first render
+  const [filteredModels, setFilteredModels] = useState<typeof models>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const compute = () => {
+      if (cancelled) return;
+      let result = models;
+      if (showFavoritesOnly) result = result.filter((m) => isFavorite(m.model_id));
+      if (typeFilter) result = result.filter((m) => m.type === typeFilter);
+      if (search.trim()) {
+        const r = fuzzySearch(result, search, (m) => [getModelShortName(m.model_id), m.model_id]).map((r) => r.item);
+        if (!cancelled) setFilteredModels(r);
+        return;
+      }
+      const sorted = [...result].sort((a, b) => {
+        if (sortKey === "name") return getModelShortName(a.model_id).localeCompare(getModelShortName(b.model_id));
+        if (sortKey === "price") return (a.base_price ?? 0) - (b.base_price ?? 0);
+        return (a.sort_order ?? 9999) - (b.sort_order ?? 9999);
+      });
+      if (!cancelled) setFilteredModels(sortAsc ? sorted : sorted.reverse());
+    };
+    // Use scheduler: defer to after paint on first load, immediate on user interaction
+    const id = requestAnimationFrame(compute);
+    return () => { cancelled = true; cancelAnimationFrame(id); };
+  }, [models, search, typeFilter, showFavoritesOnly, isFavorite, sortKey, sortAsc]);
 
-    // Favorites filter
-    if (showFavoritesOnly) {
-      result = result.filter((m) => isFavorite(m.model_id));
+  // Virtualized grid setup
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const CARD_HEIGHT = 80;
+
+  // Cols: observe the scroll container (overflow-y-auto) — its width is the true available space.
+  // Fallback: also listen to window resize so nothing is missed.
+  const MIN_CARD_WIDTH = 200;
+  const MAX_COLS = 4;
+  const calcCols = (w: number) => Math.min(MAX_COLS, Math.max(1, Math.floor(w / MIN_CARD_WIDTH)));
+  const [cols, setCols] = useState(4);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = scrollContainerRef.current;
+      if (el) setCols(calcCols(el.getBoundingClientRect().width));
+    };
+
+    // ResizeObserver on the scroll container itself
+    let obs: ResizeObserver | null = null;
+    const el = scrollContainerRef.current;
+    if (el) {
+      measure(); // immediate
+      obs = new ResizeObserver(measure);
+      obs.observe(el);
     }
 
-    // Type filter
-    if (typeFilter) result = result.filter((m) => m.type === typeFilter);
+    // Belt-and-suspenders: window resize catches cases where the element
+    // doesn't change size itself but the layout shifts (e.g. sidebar collapse)
+    window.addEventListener("resize", measure);
 
-    // Search — match against short name and model_id
-    if (search.trim()) {
-      return fuzzySearch(result, search, (m) => [
-        getModelShortName(m.model_id),
-        m.model_id,
-      ]).map((r) => r.item);
-    }
+    return () => {
+      obs?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // scrollContainerRef.current is stable after mount
 
-    // Sort
-    const sorted = [...result].sort((a, b) => {
-      if (sortKey === "name")
-        return getModelShortName(a.model_id).localeCompare(
-          getModelShortName(b.model_id),
-        );
-      if (sortKey === "price") return (a.base_price ?? 0) - (b.base_price ?? 0);
-      // popularity: use sort_order (lower = more popular)
-      return (a.sort_order ?? 9999) - (b.sort_order ?? 9999);
-    });
+  // Re-measure when scrollContainerRef actually gets assigned (first render)
+  const scrollRefCallback = useCallback((el: HTMLDivElement | null) => {
+    (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    if (el) setCols(calcCols(el.getBoundingClientRect().width));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    return sortAsc ? sorted : sorted.reverse();
-  }, [
-    models,
-    search,
-    typeFilter,
-    showFavoritesOnly,
-    isFavorite,
-    sortKey,
-    sortAsc,
-  ]);
+  const rowCount = Math.ceil(filteredModels.length / cols);
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => CARD_HEIGHT + 8,
+    overscan: 5,
+  });
 
-  const handleToggleFavorite = useCallback(
-    (e: React.MouseEvent, modelId: string) => {
+  const handleToggleFavorite = useCallback(    (e: React.MouseEvent, modelId: string) => {
       e.stopPropagation();
       toggleFavorite(modelId);
     },
@@ -299,9 +338,9 @@ export function ExplorePanel({
   );
 
   const sortLabels: Record<SortKey, string> = {
-    popularity: "Popularity",
-    name: "Name",
-    price: "Price",
+    popularity: t("models.popularity", "Popularity"),
+    name: t("models.name", "Name"),
+    price: t("models.price", "Price"),
   };
 
   return (
@@ -393,10 +432,29 @@ export function ExplorePanel({
                 <ArrowUpNarrowWide className="h-4 w-4" />
               )}
             </Button>
+
+            {/* Refresh button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-[34px] px-2.5 shrink-0 border border-border text-xs font-medium gap-1.5"
+              disabled={isRefreshing}
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  await fetchModels(true);
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+              {t("common.refresh", "Refresh")}
+            </Button>
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div ref={scrollRefCallback} className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="px-4 pb-6 pt-3">
           {/* All Models heading */}
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -438,27 +496,52 @@ export function ExplorePanel({
             ))}
           </div>
 
-          {/* Models grid — responsive columns */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-            {filteredModels.map((model) => (
-              <ModelCard
-                key={model.model_id}
-                model={model}
-                isFav={isFavorite(model.model_id)}
-                onSelect={onSelectModel}
-                onToggleFav={handleToggleFavorite}
-                onNewTab={handleOpenInNewTab}
-              />
-            ))}
-          </div>
-          {filteredModels.length === 0 && (
+          {/* Models grid — virtualized rows */}
+          {filteredModels.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               {showFavoritesOnly
-                ? t(
-                    "playground.explore.noFavorites",
-                    "No favorites yet — star a model to save it here",
-                  )
+                ? t("playground.explore.noFavorites", "No favorites yet — star a model to save it here")
                 : t("models.noResults", "No models found")}
+            </div>
+          ) : (
+            <div
+              key={cols}
+              style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const rowModels = filteredModels.slice(
+                  virtualRow.index * cols,
+                  virtualRow.index * cols + cols,
+                );
+                return (
+                  <div
+                    key={virtualRow.key}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: `${virtualRow.size - 8}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                      display: "grid",
+                      gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    {rowModels.map((model) => (
+                      <ModelCard
+                        key={model.model_id}
+                        model={model}
+                        isFav={isFavorite(model.model_id)}
+                        onSelect={onSelectModel}
+                        onToggleFav={handleToggleFavorite}
+                        onNewTab={handleOpenInNewTab}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

@@ -18,6 +18,7 @@ const PLAYGROUND_SESSION_KEY = "wavespeed_playground_session_v1";
 
 interface PersistedPlaygroundTab {
   id: string;
+  createdAt?: number;
   selectedModel: Model | null;
   formValues: Record<string, unknown>;
   formFields: FormFieldConfig[];
@@ -54,6 +55,7 @@ function parsePlaygroundSession(
     const tabs: PlaygroundTab[] = parsed.tabs.map(
       (t: PersistedPlaygroundTab) => ({
         id: t.id,
+        createdAt: t.createdAt ?? Date.now(),
         selectedModel: t.selectedModel ?? null,
         formValues: t.formValues ?? {},
         formFields: t.formFields ?? [],
@@ -94,6 +96,7 @@ export function persistPlaygroundSession(): void {
       tabCounter,
       tabs: state.tabs.map((tab) => ({
         id: tab.id,
+        createdAt: tab.createdAt,
         selectedModel: tab.selectedModel,
         formValues: tab.formValues,
         formFields: tab.formFields,
@@ -128,6 +131,7 @@ export async function hydratePlaygroundSession(): Promise<void> {
 
 interface PlaygroundTab {
   id: string;
+  createdAt: number;
   selectedModel: Model | null;
   formValues: Record<string, unknown>;
   formFields: FormFieldConfig[];
@@ -195,6 +199,7 @@ function isEmpty(value: unknown): boolean {
 function createEmptyTab(id: string, model?: Model): PlaygroundTab {
   return {
     id,
+    createdAt: Date.now(),
     selectedModel: model || null,
     formValues: {},
     formFields: [],

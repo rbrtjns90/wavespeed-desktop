@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { apiClient } from "@/api/client";
+import { useModelsStore } from "@/stores/modelsStore";
 
 const API_KEY_STORAGE_KEY = "wavespeed_api_key";
 
@@ -53,17 +54,16 @@ export const useApiKeyStore = create<ApiKeyState>((set, get) => ({
   },
 
   loadApiKey: async (force?: boolean) => {
-    // Skip if already attempted (unless forced)
-    if (get().hasAttemptedLoad && !force) {
-      return;
-    }
+    if (get().hasAttemptedLoad && !force) return;
     set({ isLoading: true, hasAttemptedLoad: true });
     try {
       const storedKey = await loadStoredApiKey();
       if (storedKey) {
         apiClient.setApiKey(storedKey);
         set({ apiKey: storedKey });
-        await get().validateApiKey();
+        // Fire validate + fetchModels in parallel — don't block UI on either
+        get().validateApiKey(); // intentionally not awaited
+        useModelsStore.getState().fetchModels(); // start immediately, don't wait for validate
       }
     } catch (error) {
       console.error("Failed to load API key:", error);

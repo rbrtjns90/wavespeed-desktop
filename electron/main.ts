@@ -257,8 +257,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1000,
-    minHeight: 700,
+    minWidth: 520,
+    minHeight: 400,
     show: false,
     autoHideMenuBar: true,
     icon: join(__dirname, "../../build/icon.png"),

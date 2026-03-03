@@ -428,12 +428,9 @@ export function PlaygroundPage() {
         createTab(model);
       }
       navigate(`/playground/${modelId}`, { replace: true });
-      // Defer panel switch so the model/form state settles before showing result panel
       if (rightPanelTab !== "result") {
-        requestAnimationFrame(() => {
-          setRightPanelTab("result");
-          sessionStorage.setItem("pg_rightPanelTab", "result");
-        });
+        setRightPanelTab("result");
+        sessionStorage.setItem("pg_rightPanelTab", "result");
       }
     }
   };
@@ -510,12 +507,8 @@ export function PlaygroundPage() {
       if (model) {
         createTab(model);
         navigate(`/playground/${primaryVariant}`);
-        // Defer panel switch to next frame so createTab's render completes first,
-        // preventing a blank-frame flash between featured→result transition
-        requestAnimationFrame(() => {
-          setRightPanelTab("result");
-          sessionStorage.setItem("pg_rightPanelTab", "result");
-        });
+        setRightPanelTab("result");
+        sessionStorage.setItem("pg_rightPanelTab", "result");
       }
     },
     [models, createTab, navigate],
@@ -914,17 +907,16 @@ export function PlaygroundPage() {
                     );
                   })}
                   {/* + button inside scroll area when not overflowing — removed, always fixed outside */}
+                  {/* + button follows last tab inside scroll area */}
+                  <button
+                    onClick={handleNewTab}
+                    className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                    title={t("playground.tabs.newTab", "New Tab")}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-              {/* + button always fixed outside scroll area */}
-              <button
-                onClick={handleNewTab}
-                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                title={t("playground.tabs.newTab", "New Tab")}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-
               {/* Right group: Featured Models / Templates */}
               {!isMobile && (
                 <button
@@ -954,14 +946,17 @@ export function PlaygroundPage() {
               </button>
             </div>
 
-            {/* Right Panel Content */}
-            <div className="flex-1 overflow-hidden flex flex-col">
+            {/* Right Panel Content — all panels stacked via absolute positioning, no hidden/show remount */}
+            <div className="flex-1 overflow-hidden relative">
+              {/* Featured panel */}
               {!isMobile && (
                 <div
-                  className={cn(
-                    "flex-1 overflow-hidden flex flex-col",
-                    rightPanelTab !== "featured" && "hidden",
-                  )}
+                  className="absolute inset-0 flex flex-col overflow-hidden transition-opacity duration-150"
+                  style={{
+                    opacity: rightPanelTab === "featured" ? 1 : 0,
+                    pointerEvents: rightPanelTab === "featured" ? "auto" : "none",
+                    visibility: rightPanelTab === "featured" ? "visible" : "hidden",
+                  }}
                 >
                   <FeaturedModelsPanel
                     onSelectFeatured={handleExploreSelectFeatured}
@@ -969,11 +964,15 @@ export function PlaygroundPage() {
                   />
                 </div>
               )}
+
+              {/* Result panel */}
               <div
-                className={cn(
-                  "flex-1 overflow-hidden flex flex-col",
-                  rightPanelTab !== "result" && "hidden",
-                )}
+                className="absolute inset-0 flex flex-col overflow-hidden transition-opacity duration-150"
+                style={{
+                  opacity: rightPanelTab === "result" ? 1 : 0,
+                  pointerEvents: rightPanelTab === "result" ? "auto" : "none",
+                  visibility: rightPanelTab === "result" ? "visible" : "hidden",
+                }}
               >
                 {activeTab ? (
                   <>
@@ -1037,11 +1036,15 @@ export function PlaygroundPage() {
                   </div>
                 )}
               </div>
+
+              {/* Templates panel */}
               <div
-                className={cn(
-                  "flex-1 overflow-hidden flex flex-col",
-                  rightPanelTab !== "templates" && "hidden",
-                )}
+                className="absolute inset-0 flex flex-col overflow-hidden transition-opacity duration-150"
+                style={{
+                  opacity: rightPanelTab === "templates" ? 1 : 0,
+                  pointerEvents: rightPanelTab === "templates" ? "auto" : "none",
+                  visibility: rightPanelTab === "templates" ? "visible" : "hidden",
+                }}
               >
                 <TemplatesPanel onUseTemplate={handleUseTemplateFromPanel} />
               </div>

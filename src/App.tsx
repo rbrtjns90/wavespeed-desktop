@@ -5,8 +5,7 @@ import { WelcomePage } from "@/pages/WelcomePage";
 import { PlaygroundPage } from "@/pages/PlaygroundPage";
 import { ModelsPage } from "@/pages/ModelsPage";
 import { TemplatesPage } from "@/pages/TemplatesPage";
-import { HistoryPage } from "@/pages/HistoryPage";
-import { AssetsPage } from "@/pages/AssetsPage";
+// HistoryPage and AssetsPage are rendered persistently in Layout
 import { SettingsPage } from "@/pages/SettingsPage";
 import { FeaturedModelsPage } from "@/pages/FeaturedModelsPage";
 import { SmartPlaygroundPage } from "@/pages/SmartPlaygroundPage";
@@ -72,8 +71,8 @@ function App() {
         <Route path="playground" element={<PlaygroundPage />} />
         <Route path="playground/*" element={<PlaygroundPage />} />
         <Route path="templates" element={<TemplatesPage />} />
-        <Route path="history" element={<HistoryPage />} />
-        <Route path="assets" element={<AssetsPage />} />
+        <Route path="history" element={<PersistentPagePlaceholder />} />
+        <Route path="assets" element={<PersistentPagePlaceholder />} />
         <Route path="z-image" element={<ZImagePage />} />
         <Route path="free-tools" element={<FreeToolsPage />} />
         {/* Workflow page - persistent rendered */}

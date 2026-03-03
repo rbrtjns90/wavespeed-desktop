@@ -42,6 +42,8 @@ import { MediaTrimmerPage } from "@/pages/MediaTrimmerPage";
 import { MediaMergerPage } from "@/pages/MediaMergerPage";
 import { FaceEnhancerPage } from "@/pages/FaceEnhancerPage";
 import { FaceSwapperPage } from "@/pages/FaceSwapperPage";
+import { HistoryPage } from "@/pages/HistoryPage";
+import { AssetsPage } from "@/pages/AssetsPage";
 import { WorkflowPage } from "@/workflow/WorkflowPage";
 import { useFreeToolListener } from "@/workflow/hooks/useFreeToolListener";
 
@@ -107,6 +109,8 @@ export function Layout() {
   // Track visits to persistent pages and last visited free-tools page
   useEffect(() => {
     const persistentPaths = [
+      "/history",
+      "/assets",
       "/free-tools/video-enhancer",
       "/free-tools/image-enhancer",
       "/free-tools/face-enhancer",
@@ -406,6 +410,8 @@ export function Layout() {
                   <div
                     className={
                       [
+                        "/history",
+                        "/assets",
                         "/free-tools/video-enhancer",
                         "/free-tools/image-enhancer",
                         "/free-tools/face-enhancer",
@@ -427,6 +433,30 @@ export function Layout() {
                   >
                     <Outlet />
                   </div>
+                  {/* Persistent History page */}
+                  {visitedPages.has("/history") && (
+                    <div
+                      className={
+                        location.pathname === "/history"
+                          ? "h-full overflow-auto"
+                          : "hidden"
+                      }
+                    >
+                      <HistoryPage key={pageKeys["/history"] || 0} />
+                    </div>
+                  )}
+                  {/* Persistent Assets page */}
+                  {visitedPages.has("/assets") && (
+                    <div
+                      className={
+                        location.pathname === "/assets"
+                          ? "h-full overflow-auto"
+                          : "hidden"
+                      }
+                    >
+                      <AssetsPage key={pageKeys["/assets"] || 0} />
+                    </div>
+                  )}
                   {/* Persistent Free Tools pages - mounted once visited, removed from visitedPages forces unmount */}
                   {visitedPages.has("/free-tools/video-enhancer") && (
                     <div

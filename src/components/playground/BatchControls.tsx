@@ -76,6 +76,7 @@ export function BatchControls({
         )}
         onClick={onRun}
         disabled={disabled || isRunning || isUploading}
+        title={isUploading ? t("playground.capture.uploading") : undefined}
       >
         {isRunning ? (
           <>

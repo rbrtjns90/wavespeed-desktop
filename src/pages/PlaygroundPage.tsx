@@ -396,7 +396,7 @@ export function PlaygroundPage() {
       } else {
         createTab(model);
       }
-      navigate(`/playground/${modelId}`);
+      navigate(`/playground/${modelId}`, { replace: true });
     }
   };
 
@@ -462,7 +462,7 @@ export function PlaygroundPage() {
         } else {
           createTab(model);
         }
-        navigate(`/playground/${modelId}`);
+        navigate(`/playground/${modelId}`, { replace: true });
         setRightPanelTab("result");
       }
     },
@@ -495,7 +495,9 @@ export function PlaygroundPage() {
             : undefined;
           createTab(model);
           if (template.playgroundData.modelId) {
-            navigate(`/playground/${template.playgroundData.modelId}`);
+            navigate(`/playground/${template.playgroundData.modelId}`, {
+              replace: true,
+            });
           }
           // Set form values after a tick so the new tab is active
           setTimeout(() => {
@@ -512,7 +514,9 @@ export function PlaygroundPage() {
             );
             if (model) {
               setSelectedModel(model);
-              navigate(`/playground/${template.playgroundData.modelId}`);
+              navigate(`/playground/${template.playgroundData.modelId}`, {
+                replace: true,
+              });
             }
           }
           setFormValues(template.playgroundData.values);
@@ -545,9 +549,12 @@ export function PlaygroundPage() {
     setActiveTab(tabId);
     const tab = tabs.find((t) => t.id === tabId);
     if (tab?.selectedModel) {
-      navigate(`/playground/${encodeURIComponent(tab.selectedModel.model_id)}`);
+      navigate(
+        `/playground/${encodeURIComponent(tab.selectedModel.model_id)}`,
+        { replace: true },
+      );
     } else {
-      navigate("/playground");
+      navigate("/playground", { replace: true });
     }
   };
 

@@ -474,7 +474,11 @@ class WaveSpeedClient {
     }
   }
 
-  async uploadFile(file: File, signal?: AbortSignal): Promise<string> {
+  async uploadFile(
+    file: File,
+    signal?: AbortSignal,
+    onUploadProgress?: (progress: number) => void,
+  ): Promise<string> {
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -498,6 +502,13 @@ class WaveSpeedClient {
           },
           timeout,
           signal,
+          onUploadProgress: onUploadProgress
+            ? (e) => {
+                if (e.total) {
+                  onUploadProgress(Math.round((e.loaded / e.total) * 100));
+                }
+              }
+            : undefined,
         },
       );
 

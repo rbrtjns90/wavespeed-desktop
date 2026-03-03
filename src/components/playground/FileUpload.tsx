@@ -60,6 +60,7 @@ export function FileUpload({
 }: FileUploadProps) {
   const { t } = useTranslation();
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState("");
   const [captureMode, setCaptureMode] = useState<CaptureMode>("upload");
@@ -109,6 +110,7 @@ export function FileUpload({
     async (blob: Blob) => {
       setError(null);
       setIsUploading(true);
+      setUploadProgress(0);
       onUploadingChange?.(true);
       setCaptureMode("upload");
 
@@ -129,7 +131,11 @@ export function FileUpload({
 
         const url = onUploadFile
           ? await onUploadFile(file)
-          : await apiClient.uploadFile(file, abortControllerRef.current.signal);
+          : await apiClient.uploadFile(
+              file,
+              abortControllerRef.current.signal,
+              (p) => setUploadProgress(p),
+            );
 
         if (multiple) {
           onChange([...urls, url]);
@@ -158,6 +164,7 @@ export function FileUpload({
 
       setError(null);
       setIsUploading(true);
+      setUploadProgress(0);
       onUploadingChange?.(true);
 
       // Create abort controller for this upload batch
@@ -173,6 +180,7 @@ export function FileUpload({
                 : await apiClient.uploadFile(
                     file,
                     abortControllerRef.current?.signal,
+                    (p) => setUploadProgress(p),
                   );
               return { url, name: file.name, type: file.type };
             } catch (err) {
@@ -473,24 +481,37 @@ export function FileUpload({
               >
                 <input {...getInputProps()} />
                 {isUploading ? (
-                  <div className="flex items-center gap-2 w-full justify-center">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      {t("playground.capture.uploading")}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCancelUpload();
-                      }}
-                      className="h-5 px-1.5 text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      <X className="h-3 w-3 mr-0.5" />
-                      {t("common.cancel")}
-                    </Button>
+                  <div className="flex flex-col gap-1.5 w-full px-1">
+                    <div className="flex items-center gap-2 justify-center">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {t("playground.capture.uploading")}
+                        {uploadProgress > 0 && uploadProgress < 100
+                          ? ` ${uploadProgress}%`
+                          : ""}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCancelUpload();
+                        }}
+                        className="h-5 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3 w-3 mr-0.5" />
+                        {t("common.cancel")}
+                      </Button>
+                    </div>
+                    {uploadProgress > 0 && (
+                      <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 w-full justify-center">

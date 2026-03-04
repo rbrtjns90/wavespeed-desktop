@@ -75,7 +75,7 @@ function buildSteps(actions: {
     {
       key: "nodePaletteBtn",
       target: '[data-guide="node-palette-btn"]',
-      side: "bottom",
+      side: "right",
       prepare: actions.closeNodePalette,
     },
     {
@@ -94,16 +94,12 @@ function buildSteps(actions: {
       key: "canvas",
       target: '[data-guide="canvas"]',
       side: "top",
+      prepare: actions.closeNodePalette,
     },
     {
       key: "canvasTools",
       target: '[data-guide="canvas-tools"]',
-      side: "bottom",
-    },
-    {
-      key: "config",
-      target: '[data-guide="canvas"]',
-      side: "top",
+      side: "left",
     },
     {
       key: "run",
@@ -111,9 +107,9 @@ function buildSteps(actions: {
       side: "bottom",
     },
     {
-      key: "templates",
+      key: "moreMenu",
       target: '[data-guide="toolbar-more"]',
-      side: "bottom",
+      side: "right",
     },
   ];
 }
@@ -456,7 +452,7 @@ export function WorkflowGuide({
 
       {/* Popover */}
       <div
-        className="absolute z-[100000] rounded-xl border border-border bg-card shadow-2xl overflow-hidden"
+        className="absolute z-[100000] rounded-xl border border-border bg-card shadow-2xl overflow-hidden flex flex-col"
         style={{
           top: popPos.top,
           left: popPos.left,
@@ -466,10 +462,9 @@ export function WorkflowGuide({
           transition: "top 0.3s ease-in-out, left 0.3s ease-in-out",
         }}
       >
-        {/* Content */}
+        {/* Content — scrollable */}
         <div
-          className="px-5 pt-5 pb-3 overflow-y-auto"
-          style={{ maxHeight: `calc(100vh - ${popPos.top + 80}px)` }}
+          className="px-5 pt-5 pb-3 overflow-y-auto flex-1 min-h-0"
         >
           <h3 className="text-sm font-semibold mb-2 text-foreground">
             {t(`workflow.guide.${current.key}.title`, current.key)}
@@ -500,8 +495,8 @@ export function WorkflowGuide({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 pb-4 pt-2 flex items-center justify-between">
+        {/* Footer — always visible, never clipped */}
+        <div className="px-5 pb-4 pt-2 flex items-center justify-between shrink-0 border-t border-border/40">
           {/* Progress dots */}
           <div className="flex items-center gap-1.5">
             {steps.map((_, i) => (

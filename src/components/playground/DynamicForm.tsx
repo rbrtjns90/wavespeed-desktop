@@ -10,7 +10,6 @@ import {
 import { FormField } from "./FormField";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
 
 interface DynamicFormProps {
   model: Model;
@@ -43,9 +42,6 @@ export function DynamicForm({
   const [enabledHiddenFields, setEnabledHiddenFields] = useState<Set<string>>(
     new Set(),
   );
-
-  // Track if advanced settings section is expanded
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Track if we've initialized defaults for this model instance
   const initializedRef = useRef<string | null>(null);
@@ -81,28 +77,9 @@ export function DynamicForm({
     );
   }, [model]);
 
-  // Split fields into primary (always visible) and advanced (collapsible)
-  // Primary: required fields
-  // Advanced: hidden fields + optional fields
-  const { primaryFields, advancedFields } = useMemo(() => {
-    const primary: FormFieldConfig[] = [];
-    const advanced: FormFieldConfig[] = [];
-    for (const field of fields) {
-      if (field.hidden) {
-        advanced.push(field);
-      } else if (field.required) {
-        primary.push(field);
-      } else {
-        advanced.push(field);
-      }
-    }
-    return { primaryFields: primary, advancedFields: advanced };
-  }, [fields]);
-
-  // Reset enabled hidden fields and collapse advanced when model changes
+  // Reset enabled hidden fields when model changes
   useEffect(() => {
     setEnabledHiddenFields(new Set());
-    setShowAdvanced(false);
   }, [model.model_id]);
 
   // Register fields and set defaults when model changes
@@ -273,61 +250,10 @@ export function DynamicForm({
     return <ScrollArea className="h-full">{formContent}</ScrollArea>;
   }
 
-  // Collapsible: primary fields always visible, advanced fields in collapsible section
+  // Collapsible: render all fields flat (primary + advanced together)
   const formContent = (
     <div className="space-y-4 py-2">
-      {/* Primary fields - always visible */}
-      {primaryFields.map(renderField)}
-
-      {/* Advanced fields - collapsible with smooth animation */}
-      {advancedFields.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className={cn(
-              "btn-shimmer flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200",
-              showAdvanced
-                ? "bg-primary/10 text-primary hover:bg-primary/15 shadow-sm shadow-primary/10"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground hover:shadow-sm",
-            )}
-          >
-            <SlidersHorizontal
-              className={cn(
-                "h-3.5 w-3.5 shrink-0 transition-transform duration-300",
-                showAdvanced && "rotate-90",
-              )}
-            />
-            <span>
-              {showAdvanced
-                ? t("playground.advancedSettings.less", "Less")
-                : t("playground.advancedSettings.more", "More")}
-            </span>
-            <span
-              className={cn(
-                "ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold transition-colors duration-200",
-                showAdvanced ? "bg-primary/20 text-primary" : "bg-background",
-              )}
-            >
-              {advancedFields.length}
-            </span>
-            <ChevronDown
-              className={cn(
-                "h-3.5 w-3.5 shrink-0 ml-auto transition-transform duration-300",
-                showAdvanced && "rotate-180",
-              )}
-            />
-          </button>
-          <div className={cn("grid-collapse", showAdvanced && "open")}>
-            <div>
-              <div className="space-y-4 rounded-lg bg-muted/30 p-3 -mx-1 border border-border/40">
-                {showAdvanced &&
-                  advancedFields.map((field, i) => renderField(field, i))}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      {fields.map(renderField)}
     </div>
   );
 

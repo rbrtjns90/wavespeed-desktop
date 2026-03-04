@@ -26,7 +26,7 @@ export function ModelsPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Page Title */}
-      <div className="px-4 py-3 border-b border-border shrink-0">
+      <div className="px-4 md:px-6 py-4 pt-14 md:pt-4 border-b border-border shrink-0">
         <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
           <Layers className="h-5 w-5 text-primary" />
           {t("playground.rightPanel.models", "All Models")}

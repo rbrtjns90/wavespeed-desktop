@@ -63,6 +63,17 @@ export function Sidebar({
     }
   }, [collapsed]);
 
+  // Dismiss tooltips when the window loses focus so they don't linger after Alt+Tab
+  useEffect(() => {
+    const handleBlur = () => {
+      setTooltipReady(false);
+      // Brief delay so the tooltip disappears, then re-enable for future hovers
+      setTimeout(() => setTooltipReady(true), 300);
+    };
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
+  }, []);
+
   const createItems: NavItem[] = [
     {
       titleKey: "nav.home",

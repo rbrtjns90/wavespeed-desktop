@@ -24,6 +24,7 @@ import { HistoryDrawer } from "@/components/playground/HistoryDrawer";
 import { ResultPanel } from "@/components/playground/ResultPanel";
 // TemplatesPanel removed from top bar (sidebar entry remains)
 import { FeaturedModelsPanel } from "@/components/playground/FeaturedModelsPanel";
+import { TemplatesPanel } from "@/components/playground/TemplatesPanel";
 import {
   RotateCcw,
   Loader2,
@@ -37,15 +38,21 @@ import {
   Layers,
   ChevronDown,
   Clock,
+  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   TemplateDialog,
   type TemplateFormData,
 } from "@/components/templates/TemplateDialog";
 
-type RightPanelTab = "result" | "featured";
+type RightPanelTab = "result" | "featured" | "templates";
 
 /** Format raw model name/id for display. e.g. "google/nano-banana-pro/text-to-image" → "Google / Nano Banana Pro" */
 function formatModelDisplay(name: string): string {
@@ -654,12 +661,52 @@ export function PlaygroundPage() {
             )}
             style={{ flexBasis: `${leftPanelWidth}px` }}
           >
-            {/* Page Title */}
-            <div className="px-3 py-3 border-b border-border shrink-0">
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
-                <PlayCircle className="h-5 w-5 text-primary" />
-                {t("playground.title")}
-              </h1>
+            {/* Page Title + quick-nav chips */}
+            <div className="px-4 md:px-6 py-4 pt-14 md:pt-4 border-b border-border shrink-0">
+              <div className="flex items-end gap-2">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 shrink-0 leading-none">
+                  <PlayCircle className="h-5 w-5 text-primary" />
+                  {t("playground.title")}
+                </h1>
+                <div className="flex items-center gap-1 ml-auto shrink-0 self-end translate-y-0.5">
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => switchTab("featured")}
+                        className={cn(
+                          "inline-flex items-center justify-center h-7 w-7 rounded-lg transition-all",
+                          rightPanelTab === "featured"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent hover:border-border",
+                        )}
+                      >
+                        <Compass className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {t("playground.rightPanel.featuredModels", "Featured Models")}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => switchTab("templates")}
+                        className={cn(
+                          "inline-flex items-center justify-center h-7 w-7 rounded-lg transition-all",
+                          rightPanelTab === "templates"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent hover:border-border",
+                        )}
+                      >
+                        <FolderOpen className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {t("nav.templates", "Templates")}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
             </div>
 
             {/* Model Selector */}
@@ -954,24 +1001,6 @@ export function PlaygroundPage() {
                   </button>
                 </div>
               </div>
-              {/* Featured Models icon button */}
-              {!isMobile && (
-                <button
-                  onClick={() => switchTab("featured")}
-                  className={cn(
-                    "flex items-center justify-center h-8 w-8 rounded-lg transition-all shrink-0 backdrop-blur-sm",
-                    rightPanelTab === "featured"
-                      ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700 border border-blue-500/50"
-                      : "bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 border border-white/10 hover:border-white/20",
-                  )}
-                  title={t(
-                    "playground.rightPanel.featuredModels",
-                    "Featured Models",
-                  )}
-                >
-                  <Compass className="h-4 w-4" />
-                </button>
-              )}
             </div>
 
             {/* Right Panel Content — all panels stacked via absolute positioning, no hidden/show remount */}
@@ -992,6 +1021,22 @@ export function PlaygroundPage() {
                     onSelectFeatured={handleExploreSelectFeatured}
                     models={models}
                   />
+                </div>
+              )}
+
+              {/* Templates panel */}
+              {!isMobile && (
+                <div
+                  className="absolute inset-0 flex flex-col overflow-hidden transition-opacity duration-150"
+                  style={{
+                    opacity: rightPanelTab === "templates" ? 1 : 0,
+                    pointerEvents:
+                      rightPanelTab === "templates" ? "auto" : "none",
+                    visibility:
+                      rightPanelTab === "templates" ? "visible" : "hidden",
+                  }}
+                >
+                  <TemplatesPanel onUseTemplate={handleUseTemplateFromPanel} />
                 </div>
               )}
 

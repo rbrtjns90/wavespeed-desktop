@@ -1196,6 +1196,8 @@
     "hideRun": "Hide this run",
     "output": "Output",
     "outputLowercase": "output",
+    "expandNode": "Expand",
+    "collapseNode": "Collapse",
     "invalidUrl": "Invalid URL",
     "removeLast": "Remove last",
     "enterField": "Enter {{field}}...",

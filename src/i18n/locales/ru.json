@@ -1136,6 +1136,8 @@
     "hideRun": "Скрыть это выполнение",
     "output": "Вывод",
     "outputLowercase": "Вывод",
+    "expandNode": "Развернуть",
+    "collapseNode": "Свернуть",
     "invalidUrl": "Недействительный URL",
     "removeLast": "Удалить последний",
     "enterField": "Введите {{field}}...",

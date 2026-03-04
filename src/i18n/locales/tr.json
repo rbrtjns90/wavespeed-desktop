@@ -1136,6 +1136,8 @@
     "hideRun": "Bu çalıştırmayı gizle",
     "output": "Çıktı",
     "outputLowercase": "Çıktı",
+    "expandNode": "Genişlet",
+    "collapseNode": "Daralt",
     "invalidUrl": "Geçersiz URL",
     "removeLast": "Sonuncuyu kaldır",
     "enterField": "{{field}} girin...",

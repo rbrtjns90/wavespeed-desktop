@@ -1136,6 +1136,8 @@
     "hideRun": "इस रन को छिपाएं",
     "output": "आउटपुट",
     "outputLowercase": "आउटपुट",
+    "expandNode": "विस्तार करें",
+    "collapseNode": "संक्षिप्त करें",
     "invalidUrl": "अमान्य URL",
     "removeLast": "अंतिम हटाएं",
     "enterField": "{{field}} दर्ज करें...",

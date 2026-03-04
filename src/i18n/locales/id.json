@@ -1136,6 +1136,8 @@
     "hideRun": "Sembunyikan proses ini",
     "output": "Keluaran",
     "outputLowercase": "Keluaran",
+    "expandNode": "Perluas",
+    "collapseNode": "Ciutkan",
     "invalidUrl": "URL tidak valid",
     "removeLast": "Hapus terakhir",
     "enterField": "Masukkan {{field}}...",

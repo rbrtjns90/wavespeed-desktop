@@ -1137,6 +1137,8 @@
     "hideRun": "Diesen Lauf ausblenden",
     "output": "Ausgabe",
     "outputLowercase": "Ausgabe",
+    "expandNode": "Erweitern",
+    "collapseNode": "Einklappen",
     "invalidUrl": "Ungültige URL",
     "removeLast": "Letztes entfernen",
     "enterField": "{{field}} eingeben...",

@@ -278,7 +278,7 @@ export function ExplorePanel({
   // Responsive grid columns — use window resize to measure scroll container width
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const CARD_HEIGHT = 82;
-  const MIN_CARD_WIDTH = 265;
+  const MIN_CARD_WIDTH = 240;
   const MAX_COLS = 5;
   const GRID_PADDING = 32;
   const GAP = 8;

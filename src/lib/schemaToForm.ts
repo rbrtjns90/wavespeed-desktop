@@ -11,6 +11,8 @@ export interface FormFieldConfig {
     | "select"
     | "file"
     | "file-array"
+    | "string-array"
+    | "object-array"
     | "size"
     | "loras";
   label: string;
@@ -26,6 +28,9 @@ export interface FormFieldConfig {
   placeholder?: string;
   hidden?: boolean; // x-hidden fields are optional and hidden by default
   schemaType?: string; // Original schema type (e.g. 'integer' vs 'number')
+  /** For object-array: schema of each item's properties */
+  itemProperties?: Record<string, SchemaProperty>;
+  itemRequired?: string[];
 }
 
 export function validateFormValues(
@@ -251,7 +256,25 @@ function propertyToField(
         maxFiles: prop.maxItems || 10,
       };
     }
-    // Otherwise skip array types for now
+    // Array of objects with properties
+    if (prop.items?.type === "object" && prop.items.properties) {
+      return {
+        ...baseField,
+        type: "object-array",
+        maxFiles: prop.maxItems || 10,
+        itemProperties: prop.items.properties,
+        itemRequired: prop.items.required,
+      };
+    }
+    // Array of strings (generic)
+    if (!prop.items || prop.items.type === "string") {
+      return {
+        ...baseField,
+        type: "string-array",
+        maxFiles: prop.maxItems || 10,
+      };
+    }
+    // Unsupported array item type — skip
     return null;
   }
 
@@ -333,6 +356,10 @@ export function getDefaultValues(
     } else if (field.type === "boolean") {
       defaults[field.name] = false;
     } else if (field.type === "file-array") {
+      defaults[field.name] = [];
+    } else if (field.type === "string-array") {
+      defaults[field.name] = [];
+    } else if (field.type === "object-array") {
       defaults[field.name] = [];
     }
   }
@@ -490,7 +517,14 @@ export function normalizePayloadArrays(
 ): Record<string, unknown> {
   const out = { ...payload };
   const arrayFieldNames = new Set<string>(
-    formFields.filter((f) => f.type === "file-array").map((f) => f.name),
+    formFields
+      .filter(
+        (f) =>
+          f.type === "file-array" ||
+          f.type === "string-array" ||
+          f.type === "object-array",
+      )
+      .map((f) => f.name),
   );
   for (const key of Object.keys(out)) {
     if (!arrayFieldNames.has(key) && !isArrayFieldName(key)) continue;

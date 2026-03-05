@@ -23,7 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Dices, Info } from "lucide-react";
+import { Dices, Info, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FormFieldProps {
@@ -406,6 +406,173 @@ export function FormField({
           />
         );
 
+      case "string-array": {
+        const items = Array.isArray(value) ? (value as string[]) : [];
+        return (
+          <div className="space-y-2">
+            {items.map((item, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input
+                  value={item}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[i] = e.target.value;
+                    onChange(next);
+                  }}
+                  disabled={disabled}
+                  placeholder={`Item ${i + 1}`}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                  disabled={disabled}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onChange([...items, ""])}
+              disabled={
+                disabled ||
+                (field.maxFiles ? items.length >= field.maxFiles : false)
+              }
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              {t("common.addItem", "Add Item")}
+            </Button>
+          </div>
+        );
+      }
+
+      case "object-array": {
+        const objItems = Array.isArray(value)
+          ? (value as Record<string, unknown>[])
+          : [];
+        const props = field.itemProperties || {};
+        const propKeys = Object.keys(props);
+        return (
+          <div className="space-y-3">
+            {objItems.map((item, i) => (
+              <div
+                key={i}
+                className="relative rounded-lg border border-border/70 p-3 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    #{i + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    onClick={() =>
+                      onChange(objItems.filter((_, idx) => idx !== i))
+                    }
+                    disabled={disabled}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {propKeys.map((key) => {
+                  const propSchema = props[key];
+                  const propType = propSchema.type;
+                  const propValue = item[key] ?? propSchema.default ?? "";
+                  const updateItem = (v: unknown) => {
+                    const next = [...objItems];
+                    next[i] = { ...next[i], [key]: v };
+                    onChange(next);
+                  };
+                  return (
+                    <div key={key} className="space-y-1">
+                      <Label className="text-xs">
+                        {propSchema.title || key}
+                      </Label>
+                      {propType === "boolean" ? (
+                        <Switch
+                          checked={Boolean(propValue)}
+                          onCheckedChange={updateItem}
+                          disabled={disabled}
+                        />
+                      ) : propType === "number" || propType === "integer" ? (
+                        <Input
+                          type="number"
+                          value={propValue as string | number}
+                          onChange={(e) =>
+                            updateItem(
+                              e.target.value === ""
+                                ? ""
+                                : Number(e.target.value),
+                            )
+                          }
+                          min={propSchema.minimum}
+                          max={propSchema.maximum}
+                          disabled={disabled}
+                        />
+                      ) : propSchema.enum ? (
+                        <Select
+                          value={String(propValue)}
+                          onValueChange={updateItem}
+                          disabled={disabled}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {propSchema.enum.map((opt) => (
+                              <SelectItem key={String(opt)} value={String(opt)}>
+                                {String(opt)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={String(propValue)}
+                          onChange={(e) => updateItem(e.target.value)}
+                          disabled={disabled}
+                        />
+                      )}
+                      {propSchema.description && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {propSchema.description}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const empty: Record<string, unknown> = {};
+                for (const key of propKeys) {
+                  empty[key] = props[key].default ?? "";
+                }
+                onChange([...objItems, empty]);
+              }}
+              disabled={
+                disabled ||
+                (field.maxFiles ? objItems.length >= field.maxFiles : false)
+              }
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              {t("common.addItem", "Add Item")}
+            </Button>
+          </div>
+        );
+      }
+
       default:
         return (
           <Input
@@ -481,6 +648,8 @@ export function FormField({
           field.type !== "loras" &&
             field.type !== "file" &&
             field.type !== "file-array" &&
+            field.type !== "string-array" &&
+            field.type !== "object-array" &&
             "overflow-hidden",
           error &&
             "[&_input]:border-destructive [&_textarea]:border-destructive",

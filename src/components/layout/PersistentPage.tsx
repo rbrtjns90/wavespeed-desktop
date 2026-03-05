@@ -1,4 +1,5 @@
 import { memo, Suspense, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 
 interface PersistentPageProps {
   /** Whether this page has been visited (controls mounting) */
@@ -10,6 +11,12 @@ interface PersistentPageProps {
   /** The lazy-loaded page component */
   children: ReactNode;
 }
+
+const LoadingFallback = (
+  <div className="flex h-full items-center justify-center">
+    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+  </div>
+);
 
 /**
  * Wrapper for persistent pages that:
@@ -31,7 +38,7 @@ export const PersistentPage = memo(function PersistentPage({
       // content-visibility helps the browser skip layout/paint for hidden subtrees
       style={active ? undefined : { contentVisibility: "hidden" }}
     >
-      <Suspense fallback={null}>{children}</Suspense>
+      <Suspense fallback={active ? LoadingFallback : null}>{children}</Suspense>
     </div>
   );
 });

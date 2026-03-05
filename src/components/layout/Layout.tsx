@@ -687,7 +687,15 @@ export function Layout() {
                           : { contentVisibility: "hidden" }
                       }
                     >
-                      <Suspense fallback={null}>
+                      <Suspense
+                        fallback={
+                          location.pathname === "/workflow" ? (
+                            <div className="flex h-full items-center justify-center">
+                              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : null
+                        }
+                      >
                         <LazyWorkflowPage key={pageKeys["/workflow"] || 0} />
                       </Suspense>
                     </div>

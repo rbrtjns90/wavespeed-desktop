@@ -1138,6 +1138,8 @@
     "hideRun": "Sembunyikan larian ini",
     "output": "Output",
     "outputLowercase": "Output",
+    "expandNode": "Kembang",
+    "collapseNode": "Kuncupkan",
     "invalidUrl": "URL tidak sah",
     "removeLast": "Buang yang terakhir",
     "enterField": "Masukkan {{field}}...",

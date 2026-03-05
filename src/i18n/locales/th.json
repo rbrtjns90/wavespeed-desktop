@@ -1138,6 +1138,8 @@
     "hideRun": "ซ่อนการดำเนินการนี้",
     "output": "ผลลัพธ์",
     "outputLowercase": "ผลลัพธ์",
+    "expandNode": "ขยาย",
+    "collapseNode": "ยุบ",
     "invalidUrl": "URL ไม่ถูกต้อง",
     "removeLast": "ลบรายการสุดท้าย",
     "enterField": "ใส่{{field}}...",

@@ -1138,6 +1138,8 @@
     "hideRun": "Ocultar esta ejecución",
     "output": "Salida",
     "outputLowercase": "Salida",
+    "expandNode": "Expandir",
+    "collapseNode": "Contraer",
     "invalidUrl": "URL no válida",
     "removeLast": "Quitar último",
     "enterField": "Introducir {{field}}...",

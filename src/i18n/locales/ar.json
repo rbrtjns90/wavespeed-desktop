@@ -1138,6 +1138,8 @@
     "hideRun": "إخفاء هذا التشغيل",
     "output": "الإخراج",
     "outputLowercase": "الإخراج",
+    "expandNode": "توسيع",
+    "collapseNode": "طي",
     "invalidUrl": "URL غير صالح",
     "removeLast": "إزالة האחר",
     "enterField": "أدخل {{field}}...",

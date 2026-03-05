@@ -1139,6 +1139,8 @@
     "hideRun": "이 실행 숨기기",
     "output": "출력",
     "outputLowercase": "출력",
+    "expandNode": "펼치기",
+    "collapseNode": "접기",
     "invalidUrl": "잘못된 URL",
     "removeLast": "마지막 제거",
     "enterField": "{{field}} 입력...",

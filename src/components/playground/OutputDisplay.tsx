@@ -24,7 +24,7 @@ import {
   X,
   Save,
   FolderHeart,
-  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { isImageUrl, isVideoUrl, isAudioUrl } from "@/lib/mediaUtils";
 import { AudioPlayer } from "@/components/shared/AudioPlayer";
@@ -100,12 +100,12 @@ interface OutputDisplayProps {
   error: string | null;
   isLoading: boolean;
   modelId?: string;
-  hideGameButton?: boolean;
-  gridLayout?: boolean;
   /** Total number of history items (for fullscreen prev/next across generations) */
   historyLength?: number;
   /** Navigate to prev/next history generation from fullscreen */
   onNavigateHistory?: (direction: "prev" | "next") => void;
+  /** Content to show when idle/loading (replaces game) */
+  idleFallback?: React.ReactNode;
 }
 
 export function OutputDisplay({
@@ -116,6 +116,7 @@ export function OutputDisplay({
   modelId,
   historyLength,
   onNavigateHistory,
+  idleFallback,
 }: OutputDisplayProps) {
   const { t } = useTranslation();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -125,7 +126,7 @@ export function OutputDisplay({
   const autoSavedUrlsRef = useRef<Set<string>>(new Set());
   const prevLoadingRef = useRef(false);
 
-  // Game state
+  // Game state (mobile: no idleFallback, show FlappyBird)
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [showGame, setShowGame] = useState(
     () => outputs.length === 0 || isLoading,
@@ -201,7 +202,7 @@ export function OutputDisplay({
     prevOutputsLengthRef.current = outputs.length;
   }, [outputs.length]);
 
-  // Reset game state when outputs are cleared (new run starting)
+  // Reset view state when outputs are cleared (new run starting)
   useEffect(() => {
     if (outputs.length === 0 && !isLoading && !error) {
       setShowGame(true);
@@ -210,21 +211,20 @@ export function OutputDisplay({
     }
   }, [outputs.length, isLoading, error]);
 
-  // Auto-switch from game to results when generation completes
+  // Auto-switch from game to results when generation completes (mobile only)
   useEffect(() => {
+    if (idleFallback) return; // Desktop uses idleFallback flow
     const wasLoading = prevLoadingRef.current;
-    // Don't update ref here — the auto-save effect below also reads it
     if (wasLoading && !isLoading && outputs.length > 0 && !error) {
       setShowGame(false);
     }
-  }, [isLoading, outputs.length, error]);
+  }, [isLoading, outputs.length, error, idleFallback]);
 
   const handleGameStart = useCallback(() => {
     setIsGameStarted(true);
   }, []);
 
   const handleGameEnd = useCallback(() => {
-    // Game ended - don't auto-switch, let user view results via notification
     setGameEndedWithResults(true);
   }, []);
 
@@ -456,32 +456,65 @@ export function OutputDisplay({
     );
   }
 
-  // Show game when: no outputs, loading, or user toggled to game view
-  const showGameView =
-    outputs.length === 0 ||
-    isLoading ||
-    (showGame && (gameEndedWithResults || isGameStarted));
+  // --- Mobile: FlappyBird game (when no idleFallback) ---
+  if (!idleFallback) {
+    const showGameView =
+      outputs.length === 0 ||
+      isLoading ||
+      (showGame && (gameEndedWithResults || isGameStarted));
 
-  if (showGameView) {
+    if (showGameView) {
+      return (
+        <div className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-card/50">
+          <FlappyBird
+            onGameStart={handleGameStart}
+            onGameEnd={handleGameEnd}
+            isTaskRunning={isLoading}
+            taskStatus={t("playground.generating")}
+            idleMessage={
+              outputs.length === 0 && !isLoading
+                ? {
+                    title: t("playground.noOutputs"),
+                    subtitle: t("playground.configureAndRun"),
+                  }
+                : undefined
+            }
+            hasResults={outputs.length > 0 && !isLoading}
+            onViewResults={() => setShowGame(false)}
+            modelId={modelId}
+          />
+        </div>
+      );
+    }
+  }
+
+  // --- Desktop: Loading state (when idleFallback provided) ---
+  if (idleFallback && isLoading) {
     return (
-      <div className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-card/50">
-        <FlappyBird
-          onGameStart={handleGameStart}
-          onGameEnd={handleGameEnd}
-          isTaskRunning={isLoading}
-          taskStatus={t("playground.generating")}
-          idleMessage={
-            outputs.length === 0 && !isLoading
-              ? {
-                  title: t("playground.noOutputs"),
-                  subtitle: t("playground.configureAndRun"),
-                }
-              : undefined
-          }
-          hasResults={outputs.length > 0 && !isLoading}
-          onViewResults={() => setShowGame(false)}
-          modelId={modelId}
-        />
+      <div className="h-full flex flex-col items-center justify-center gap-4 rounded-xl border border-border/50 bg-card/30">
+        <div className="relative">
+          <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+          <div className="relative rounded-full bg-primary/10 p-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            {t("playground.generating")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t("playground.generatingHint", "This may take a few seconds...")}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Desktop: FeaturedModelsPanel fallback (when idle, no outputs) ---
+  if (idleFallback && outputs.length === 0) {
+    return (
+      <div className="relative h-full overflow-hidden rounded-xl">
+        <div className="h-full overflow-auto">{idleFallback}</div>
       </div>
     );
   }
@@ -584,14 +617,6 @@ export function OutputDisplay({
               key={index}
               className="relative group rounded-lg border overflow-hidden bg-muted/30 flex items-center justify-center flex-1 min-h-0"
             >
-              <div className="absolute left-2 top-2 z-10">
-                <Badge
-                  variant="secondary"
-                  className="rounded-md bg-background/80 px-2 py-0.5 text-[11px] backdrop-blur"
-                >
-                  <Sparkles className="mr-1 h-3 w-3" />#{index + 1}
-                </Badge>
-              </div>
               {isImage && (
                 <img
                   src={outputStr}

@@ -954,35 +954,127 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
   const onDrop = useCallback(
     (event: DragEvent) => {
       event.preventDefault();
+      if (!reactFlowInstance.current || !reactFlowWrapper.current) return;
+
       const nodeType = event.dataTransfer.getData(
         "application/reactflow-nodetype",
       );
-      if (!nodeType || !reactFlowInstance.current || !reactFlowWrapper.current)
+
+      // --- Drop from node palette (existing behaviour) ---
+      if (nodeType) {
+        const bounds = reactFlowWrapper.current.getBoundingClientRect();
+        const position = reactFlowInstance.current.project({
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        });
+        const def = nodeDefs.find((d) => d.type === nodeType);
+        const defaultParams: Record<string, unknown> = {};
+        if (def) {
+          for (const p of def.params) {
+            if (p.default !== undefined) defaultParams[p.key] = p.default;
+          }
+        }
+        const newNodeId = addNode(
+          nodeType,
+          position,
+          defaultParams,
+          def ? t(`workflow.nodeDefs.${def.type}.label`, def.label) : nodeType,
+          def?.params ?? [],
+          def?.inputs ?? [],
+          def?.outputs ?? [],
+        );
+        recordRecentNodeType(nodeType);
+        selectNode(newNodeId);
         return;
+      }
+
+      // --- Drop media file from OS onto empty canvas → auto-create upload node ---
+      const file = event.dataTransfer.files?.[0];
+      if (!file) return;
+
+      // Only handle media files (image / video / audio)
+      const isMedia =
+        file.type.startsWith("image/") ||
+        file.type.startsWith("video/") ||
+        file.type.startsWith("audio/");
+      if (!isMedia) return;
+
+      // If the drop landed on an existing node, let the node handle it (don't interfere)
+      const target = event.target as HTMLElement;
+      if (target.closest(".react-flow__node")) return;
+
       const bounds = reactFlowWrapper.current.getBoundingClientRect();
       const position = reactFlowInstance.current.project({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       });
-      const def = nodeDefs.find((d) => d.type === nodeType);
+
+      const uploadDef = nodeDefs.find((d) => d.type === "input/media-upload");
       const defaultParams: Record<string, unknown> = {};
-      if (def) {
-        for (const p of def.params) {
+      if (uploadDef) {
+        for (const p of uploadDef.params) {
           if (p.default !== undefined) defaultParams[p.key] = p.default;
         }
       }
+
       const newNodeId = addNode(
-        nodeType,
+        "input/media-upload",
         position,
         defaultParams,
-        def ? t(`workflow.nodeDefs.${def.type}.label`, def.label) : nodeType,
-        def?.params ?? [],
-        def?.inputs ?? [],
-        def?.outputs ?? [],
+        uploadDef
+          ? t(`workflow.nodeDefs.${uploadDef.type}.label`, uploadDef.label)
+          : "Upload",
+        uploadDef?.params ?? [],
+        uploadDef?.inputs ?? [],
+        uploadDef?.outputs ?? [],
       );
-      recordRecentNodeType(nodeType);
-      // Auto-select the newly dropped node so the right config panel opens
+      recordRecentNodeType("input/media-upload");
       selectNode(newNodeId);
+
+      // Upload the file and update the newly created node's params
+      const detectMediaType = (name: string): string => {
+        const ext = name.split(".").pop()?.toLowerCase() ?? "";
+        if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext))
+          return "image";
+        if (["mp4", "mov", "webm", "avi", "mkv"].includes(ext)) return "video";
+        if (["mp3", "wav", "ogg", "m4a", "flac", "aac"].includes(ext))
+          return "audio";
+        return "file";
+      };
+
+      const mediaType = detectMediaType(file.name);
+      const { updateNodeParams } = useWorkflowStore.getState();
+
+      // Show local preview immediately
+      const blobUrl = URL.createObjectURL(file);
+      updateNodeParams(newNodeId, {
+        ...defaultParams,
+        uploadedUrl: blobUrl,
+        fileName: file.name,
+        mediaType,
+      });
+
+      // Upload to CDN in background
+      import("@/api/client").then(({ apiClient }) => {
+        apiClient
+          .uploadFile(file)
+          .then((url) => {
+            URL.revokeObjectURL(blobUrl);
+            const current =
+              useWorkflowStore.getState().nodes.find((n) => n.id === newNodeId)
+                ?.data?.params ?? {};
+            updateNodeParams(newNodeId, {
+              ...current,
+              uploadedUrl: url,
+              fileName: file.name,
+              mediaType,
+            });
+          })
+          .catch((err) => {
+            console.error("Auto-upload failed:", err);
+            // Keep the blob preview so user can see what they dropped
+          });
+      });
     },
     [addNode, nodeDefs, recordRecentNodeType, selectNode, t],
   );

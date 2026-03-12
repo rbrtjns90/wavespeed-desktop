@@ -841,7 +841,7 @@ ipcMain.handle(
               ? https
               : http;
             redirectProtocol
-              .get(redirectUrl, (redirectResponse) => {
+              .get(redirectUrl, { headers: { "User-Agent": "curl/8.5.0", Accept: "*/*" } }, (redirectResponse) => {
                 handleResponse(redirectResponse);
               })
               .on("error", (err) => {
@@ -865,9 +865,11 @@ ipcMain.handle(
         file.on("finish", finalize);
       };
 
-      httpProtocol.get(url, handleResponse).on("error", (err) => {
-        cleanup(err);
-      });
+      httpProtocol
+        .get(url, { headers: { "User-Agent": "curl/8.5.0", Accept: "*/*" } }, handleResponse)
+        .on("error", (err) => {
+          cleanup(err);
+        });
     });
   },
 );
